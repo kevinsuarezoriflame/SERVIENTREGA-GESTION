@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Gestión Servientrega · Oriflame</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+<style>
+:root{
+ --sv:#00A651;--sv2:#008A43;--sv3:#006F36;--mint:#DDF3E8;--mint2:#F1FAF6;--deep:#075D3C;
+ --bg:#F5F6F6;--line:#DCE3E0;--ink:#17211D;--muted:#69746F;--shadow:0 6px 18px rgba(23,33,29,.07);
+ --bar-fill:#C9F0DC;--bar-border:#7FD2A7;
+}
+*{box-sizing:border-box}body{margin:0;font-family:Segoe UI,Arial,sans-serif;color:var(--ink);background:linear-gradient(180deg,#F4F6F5 0%,#FAFBFB 100%);overflow-x:hidden}
+button,input,select,textarea{font:inherit}button{cursor:pointer}
+.app{display:grid;grid-template-columns:235px 1fr;min-height:100vh;transition:grid-template-columns .2s ease}
+.app.sidebar-collapsed{grid-template-columns:72px 1fr}
+.sidebar{background:linear-gradient(180deg,var(--sv),var(--sv3));padding:14px 12px;color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden}
+.sidebar-toggle{position:absolute;top:9px;right:9px;width:27px;height:27px;border:1px solid rgba(255,255,255,.42);background:rgba(0,111,54,.78);color:#fff;border-radius:8px;font-size:22px;line-height:1;display:grid;place-items:center;z-index:12;box-shadow:0 2px 7px rgba(0,0,0,.12)}
+.sidebar-toggle:hover{background:#006F36}
+.logo-wrap{padding:8px 40px 18px 5px;min-height:64px}.logo-wrap img{display:block;width:165px;max-width:100%;height:auto}.logo-wrap .org{font-size:10px;font-weight:700;letter-spacing:.7px;margin:8px 4px 0;opacity:.9}
+.nav{display:flex;flex-direction:column;gap:7px}.nav button{border:0;background:transparent;color:#fff;text-align:left;padding:12px 13px;border-radius:9px;font-weight:800;display:flex;align-items:center;gap:9px;white-space:nowrap}.nav button.active,.nav button:hover{background:#fff;color:var(--sv3)}.nav-icon{width:20px;flex:0 0 20px;text-align:center;display:grid;place-items:center}.nav-icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;display:block}.nav-label{overflow:hidden}
+.sidebar-bottom{margin-top:auto;padding:10px;border:1px solid rgba(255,255,255,.18);border-radius:9px;background:rgba(0,0,0,.11);font-size:10px;line-height:1.5}
+.app.sidebar-collapsed .sidebar{padding-left:9px;padding-right:9px}
+.app.sidebar-collapsed .sidebar-toggle{right:22px;top:8px}
+.app.sidebar-collapsed .logo-wrap{display:none}
+.app.sidebar-collapsed .logo-wrap img{display:none}
+.app.sidebar-collapsed .logo-wrap::after{display:none}
+.app.sidebar-collapsed .logo-wrap .org,.app.sidebar-collapsed .nav-label,.app.sidebar-collapsed .sidebar-bottom{display:none}
+.app.sidebar-collapsed .nav{margin-top:48px}.app.sidebar-collapsed .nav button{justify-content:center;padding:12px 8px}
+.app.sidebar-collapsed .nav-icon{width:auto;flex:0 0 auto;font-size:17px}
+.main{padding:14px;min-width:0}.page{display:none}.page.active{display:block}.page-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.page-head h1{margin:0;font-size:23px;font-weight:900}
+.card,.panel,.kpi-canales,.grafico,.efectividad-box{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;border:1px solid #b9d7cd;background:#fff;color:var(--ink);border-radius:9px;padding:0 12px;font-weight:800;font-size:11px}.btn-green{background:var(--sv);color:#fff;border-color:var(--sv)}.btn-outline{background:#fff;color:var(--deep);border:1.5px solid var(--deep)}.btn-danger{background:#fff2f2;color:#ba3f3f;border-color:#e9bcbc}.btn:disabled{opacity:.45;cursor:not-allowed}
+.tabs-owners{display:flex;gap:7px;flex-wrap:wrap;padding:10px;border-bottom:1px solid #e7f1ed}.tabs-owners button{border:1px solid #bddbd0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11px;font-weight:850}.tabs-owners button.active{background:var(--sv);border-color:var(--sv);color:#fff}.owner-count{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;margin-left:6px;border-radius:999px;background:#DFF3E9;color:var(--deep);font-size:9px;font-weight:950;vertical-align:middle}.tabs-owners button.active .owner-count{background:#fff;color:var(--deep)}
+.toolbar{padding:9px 10px;display:grid;grid-template-columns:130px 142px 105px 112px minmax(220px,1.55fr) minmax(150px,.95fr) minmax(175px,1.05fr) auto auto auto;gap:7px;align-items:end;overflow-x:auto;overflow-y:hidden}.toolbar>.field{min-width:0}.field label{display:block;font-size:9px;font-weight:850;margin-bottom:4px;color:#50625b;white-space:nowrap}.field input,.field select{height:32px;border:1px solid #b9d7cd;border-radius:9px;background:#fff;padding:0 8px;min-width:0;width:100%;font-size:11px}.field.search input{min-width:0}.toolbar>.btn{height:32px;padding:0 10px;white-space:nowrap;font-size:10px}
+.table-wrap{overflow:auto;max-height:calc(100vh - 210px);border-top:1px solid #eef4f1}
+/* Columnas congeladas de Pedidos */
+#ordersTable th:nth-child(1),#ordersTable td:nth-child(1){position:sticky;left:0;width:92px;min-width:92px;max-width:92px}
+#ordersTable th:nth-child(2),#ordersTable td:nth-child(2){position:sticky;left:92px;width:102px;min-width:102px;max-width:102px}
+#ordersTable th:nth-child(3),#ordersTable td:nth-child(3){position:sticky;left:194px;width:92px;min-width:92px;max-width:92px}
+#ordersTable th:nth-child(4),#ordersTable td:nth-child(4){position:sticky;left:286px;width:300px;min-width:300px;max-width:300px}
+#ordersTable thead th:nth-child(-n+4){z-index:8;background:#F3F6F5}
+#ordersTable tbody td:nth-child(-n+4){z-index:4;background:#fff}
+#ordersTable tbody tr:nth-child(odd) td:nth-child(-n+4){background:#FCFDFD}
+#ordersTable tbody tr:hover td:nth-child(-n+4){background:#F0F8F4}
+#ordersTable th:nth-child(4),#ordersTable td:nth-child(4){box-shadow:6px 0 8px -8px rgba(0,0,0,.45)}
+#ordersTable{font-size:9.5px}#ordersTable th,#ordersTable td{padding:3px 6px;height:25px;line-height:1.15}
+#ordersTable .editable{height:20px;padding:0 5px}
+#ordersTable .guide-id{font-weight:950;color:#006F36;letter-spacing:.15px}
+#ordersTable td:first-child{border-left:3px solid transparent}
+#ordersTable tr.working-row td{background:#E8F7EF!important}
+#ordersTable tr.working-row td:first-child{border-left-color:#00A651}
+#ordersTable tr.working-row .guide-id{color:#004D28;text-decoration:underline;text-underline-offset:2px}
+.orders-table-wrap{scrollbar-gutter:stable}
+.orders-hscroll{position:sticky;bottom:0;z-index:20;height:17px;overflow-x:auto;overflow-y:hidden;background:#fff;border-top:1px solid #DCE3E0}
+.orders-hscroll>div{height:1px;min-width:100%}
+.orders-hscroll::-webkit-scrollbar{height:14px}
+.orders-hscroll::-webkit-scrollbar-thumb{background:#9AA7A1;border-radius:10px;border:3px solid #fff}
+.orders-hscroll::-webkit-scrollbar-track{background:#EDF1EF}
+
+table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}th,td{border-right:1px solid #e8f2ee;border-bottom:1px solid #e8f2ee;padding:5px 7px;text-align:left;white-space:nowrap;height:29px}th{position:sticky;top:0;background:#F3F6F5;z-index:2;font-weight:900}tbody tr:nth-child(odd){background:#FCFDFD}tbody tr:hover{background:#F0F8F4}
+.badge{display:inline-block;border-radius:5px;padding:3px 7px;font-weight:850;font-size:9px;max-width:330px;overflow:hidden;text-overflow:ellipsis}.b-ent{background:#e5f8ee;color:#078b51}.b-route{background:#edf5ff;color:#2d73c9}.b-agency{background:#e9f8f0;color:#087c4b}.b-return{background:#f2edff;color:#6f4fd0}.b-pend{background:#fff4df;color:#c17a00}.b-neutral{background:#eff3f2;color:#62706b}
+.socio-btn{height:22px;border:1px solid #d5b63e;background:#fff7bf;border-radius:999px;padding:0 8px;font-size:9px;font-weight:900;margin-left:5px}.editable{height:23px;border:1px solid #bfd5cd;border-radius:6px;padding:0 6px;font-size:10px;background:#fff}
+.monthbar{display:flex;gap:8px;align-items:end;flex-wrap:wrap;padding:10px;margin-bottom:10px}.monthbar .status{margin-left:auto;font-size:10px;font-weight:850;color:var(--deep);padding:7px 10px;border-radius:999px;background:var(--mint2);border:1px solid #b7dccf}
+.paste-grid{display:grid;grid-template-columns:205px 1fr;gap:10px}.paste-menu{padding:10px}.paste-menu button{display:block;width:100%;text-align:left;border:0;background:#f1f7f4;margin-bottom:7px;padding:10px;border-radius:8px;font-weight:850}.paste-menu button.active{background:var(--mint2);color:var(--deep);border:1px solid #a9d5c5}.paste-card{padding:14px}.paste-card h3{margin:0 0 10px}.paste-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.paste-card textarea{width:100%;height:300px;border:1px solid #b9d7cd;border-radius:10px;padding:9px;font-family:Consolas,monospace;font-size:10px;resize:vertical}.file-row{display:flex;gap:8px;align-items:center;margin:8px 0}.file-row input[type=file]{max-width:320px;font-size:11px}.result-box{margin-top:9px;border:1px dashed #9FD4C5;border-radius:10px;padding:8px;background:#fff;display:none;font-size:11px;color:#0b3f32}
+.notice{margin-bottom:10px;border:1px solid #b9ddcf;border-radius:10px;padding:10px 12px;background:#eef9f4;font-size:11px;color:#315d48}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-bottom:10px}.stat{padding:12px;text-align:center}.stat .n{font-size:24px;font-weight:900;color:var(--deep)}.stat .t{font-size:10px;color:var(--muted);font-weight:850}
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.config-card{padding:14px}.config-card h3{margin:0 0 9px;font-size:14px}.full{grid-column:1/-1}.listbox{border:1px solid #d7e9e2;border-radius:9px;overflow:auto;max-height:330px}.listrow{display:grid;grid-template-columns:1fr 1fr auto;gap:7px;padding:7px 9px;border-bottom:1px solid #e8f2ee;align-items:center;font-size:11px}.listrow:last-child{border-bottom:0}.listrow input,.listrow select{height:30px;border:1px solid #bfd5cd;border-radius:7px;padding:0 7px}.addrow{display:grid;grid-template-columns:1fr 1fr auto;gap:7px;margin-top:8px}.addrow input,.addrow select{height:34px;border:1px solid #bfd5cd;border-radius:8px;padding:0 8px}.contact-tools{display:flex;gap:8px;margin-bottom:8px}.contact-tools input{height:34px;border:1px solid #bfd5cd;border-radius:8px;padding:0 8px;min-width:260px}
+.rules-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:14px}
+.rule-box{border:1px solid #d7e9e2;border-radius:10px;padding:12px;background:#fbfdfc}
+.rule-box h4{margin:0 0 9px;font-size:12px}
+.rule-note{font-size:10px;color:#697772;line-height:1.45;margin-top:7px}
+.owner-actions{display:flex;gap:6px;justify-content:flex-end}
+.owner-replace{white-space:nowrap}
+@media(max-width:900px){.rules-grid{grid-template-columns:1fr}}
+
+/* Dashboard: estructura tomada del panel de efectividad */
+.dashboard-wrap{max-width:1400px;margin:0 auto}.kpi-canales{padding:12px;margin-bottom:12px}.kpi-canales .title{font-weight:800;margin-bottom:10px;text-align:center}.kpi-canales .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.kpi-canales .box{border:1px solid #DCE3E0;border-radius:10px;padding:10px;text-align:center}.kpi-canales .box .v{color:#00A651;font-size:1.6rem;font-weight:800;margin:0}.kpi-canales .box .t{margin:0;font-size:.9rem;font-weight:700}
+.charts-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:20px;align-items:start}
+.dashboard-wrap .charts-row:first-of-type{grid-template-columns:minmax(350px,.78fr) minmax(520px,1.22fr)}
+#tablaProvincia table{table-layout:fixed;font-size:.82rem}
+#tablaProvincia th,#tablaProvincia td{padding:5px 7px}
+#tablaProvincia th:nth-child(1),#tablaProvincia td:nth-child(1){width:55%}
+#tablaProvincia th:nth-child(2),#tablaProvincia td:nth-child(2){width:20%}
+#tablaProvincia th:nth-child(3),#tablaProvincia td:nth-child(3){width:25%}
+.dashboard-wrap .grafico>strong{display:block;color:#075D3C;font-size:15px;margin-bottom:4px}
+.dashboard-wrap .grafico{border-top:3px solid #DDF3E8}
+.dashboard-wrap .efectividad-box{border-top:3px solid #DDF3E8}
+.grafico{padding:16px;text-align:center;align-self:start;overflow:hidden}.grafico canvas{width:100%!important;display:block}.canvas-wrap{position:relative;height:240px;max-height:240px;margin-top:8px}.canvas-wrap.claims{height:260px;max-height:260px}.canvas-wrap canvas{width:100%!important;height:100%!important;max-height:100%!important;display:block}.chart-placeholder{height:100%;display:flex;align-items:center;justify-content:center;color:#728079;font-size:12px;border:1px dashed #d8e7e0;border-radius:8px;background:#fbfdfc}.efectividad-box{display:flex;flex-direction:column;justify-content:center;align-items:center;height:200px;padding:16px;text-align:center}.efectividad-box .valor{font-size:2.6rem;font-weight:bold;color:#00A651}.efectividad-box .titulo{font-weight:bold;margin-top:10px}.boton-descarga{background:#DCE3E0;border:none;border-radius:6px;padding:6px 10px;font-size:.8rem;cursor:pointer;margin-top:6px}.tabla-datos{margin-top:12px;font-size:.9rem}.tabla-datos table{width:100%;border:1px solid #ddd}.tabla-datos th,.tabla-datos td{border:1px solid #ddd;padding:6px 8px;text-align:left}.tabla-datos th{background:#F2F7F4;position:static}.celda-barra{background:#fff;padding:4px}.barra-contenedor{background:#fff;border:1px solid var(--bar-border);border-radius:4px;height:20px;position:relative}.barra-progreso{background:var(--bar-fill);height:100%;border-radius:4px 0 0 4px}.barra-label{position:absolute;left:8px;top:0;height:100%;font-size:.85rem;color:#000;display:flex;align-items:center}.total-line{font-size:.85rem;opacity:.7;margin-top:6px;text-align:left}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.42);display:none;align-items:center;justify-content:center;z-index:1000}.modal{width:min(520px,92vw);background:#fff;border-radius:12px;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,.25)}.modal h3{margin:0 0 10px}.modal dl{display:grid;grid-template-columns:120px 1fr;gap:7px 10px;font-size:12px}.modal dt{font-weight:850;color:#5a6964}.modal dd{margin:0}.modal-actions{text-align:right;margin-top:14px}
+.toast{position:fixed;right:18px;bottom:18px;background:#14221d;color:#fff;border-radius:8px;padding:10px 13px;font-size:11px;display:none;z-index:1200}.empty{padding:28px;text-align:center;color:#728079;font-size:12px}
+@media(max-width:1100px){.app{grid-template-columns:195px 1fr}.toolbar{min-width:1120px}.app.sidebar-collapsed{grid-template-columns:72px 1fr}.stats{grid-template-columns:repeat(2,1fr)}.config-grid{grid-template-columns:1fr}.full{grid-column:auto}.kpi-canales .grid{grid-template-columns:1fr}.paste-grid{grid-template-columns:1fr}.sidebar{position:relative;height:auto}}
+</style>
+</head>
+<body>
+<div class="app" id="appRoot">
+<aside class="sidebar">
+  <button class="sidebar-toggle" id="sidebarToggle" title="Plegar menú">‹</button>
+  <div class="logo-wrap"><img src="data:image/png;base64,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" alt="Servientrega"><div class="org">ORIFLAME DEL ECUADOR S.A.</div></div>
+  <div class="nav">
+    <button class="active" data-page="pedidos"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg></span><span class="nav-label">Pedidos</span></button>
+    <button data-page="dashboard"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span class="nav-label">Dashboard</span></button>
+    <button data-page="infobip"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z"/><path d="M7 9h10M7 13h7"/></svg></span><span class="nav-label">INFOBIP</span></button>
+    <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
+    <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
+  </div>
+  <div class="sidebar-bottom">Gestión Servientrega · Oriflame<br><span id="cloudStatus">Firebase: conectando...</span></div>
+</aside>
+
+<main class="main">
+<section id="pedidos" class="page active">
+  <div class="page-head"><h1>Pedidos</h1><button class="btn btn-green" id="exportOrders">⬇ Excel</button></div>
+  <div class="panel">
+    <div class="tabs-owners" id="ownerTabs"></div>
+    <div class="toolbar">
+      <div class="field"><label>Mes</label><select id="pMonth"></select></div>
+      <div class="field"><label>Fecha guía</label><input type="date" id="pDate"></div>
+      <div class="field"><label>Canal</label><select id="pChannel"><option value="">Todos</option><option>PUP</option><option>HD</option><option>SPO</option></select></div>
+      <div class="field"><label>Estado</label><select id="pStatus"><option value="">Todos</option><option value="pending">No entregados</option><option value="delivered">Entregados</option></select></div>
+      <div class="field"><label>Status Servientrega</label><select id="pServiStatus"><option value="">Todos</option></select></div>
+      <div class="field"><label>Claim</label><select id="pClaim"></select></div>
+      <div class="field search"><label>Buscar</label><input id="pSearch" placeholder="Guía, socio, destinatario..."></div>
+      <button class="btn btn-outline" id="pendingFirst" title="Ordenar no entregados primero">↑ Pendientes</button>
+      <button class="btn btn-green" id="copyPending" title="Copiar no entregados de la vista actual">📋 Copiar</button>
+      <button class="btn" id="clearFilters">Limpiar</button>
+    </div>
+    <div class="table-wrap orders-table-wrap" id="ordersScrollWrap"><table id="ordersTable"></table></div>
+    <div class="orders-hscroll" id="ordersHScroll"><div id="ordersHScrollInner"></div></div>
+  </div>
+</section>
+
+<section id="dashboard" class="page">
+  <div class="page-head"><h1>Dashboard</h1></div>
+  <div class="dashboard-wrap">
+    <div class="panel monthbar">
+      <div class="field"><label>Mes</label><select id="dMonth"></select></div>
+      <button class="btn btn-outline" id="closeMonth">🔒 Cerrar mes</button>
+      <span class="status" id="monthStatus">MES ABIERTO</span>
+    </div>
+    <div class="kpi-canales">
+      <div class="title">Clasificación de canales</div>
+      <div class="grid">
+        <div class="box"><p class="v" id="kpiHD">-</p><p class="t">HD <small>(Home Delivery)</small></p></div>
+        <div class="box"><p class="v" id="kpiPUP">-</p><p class="t">PUP <small>(Puntos Express)</small></p></div>
+        <div class="box"><p class="v" id="kpiSPO">-</p><p class="t">SPO <small>(Enlaces)</small></p></div>
+      </div>
+    </div>
+    <div class="charts-row">
+      <div class="grafico">
+        <strong>Pedidos por Provincia</strong>
+        <div id="tablaProvincia" class="tabla-datos"></div>
+        <div id="totalProvincia" class="total-line"></div>
+      </div>
+      <div class="grafico">
+        <strong>Entregas por Tiempo</strong>
+        <div class="canvas-wrap" id="wrapGraficoTiempo"><canvas id="graficoTiempo"></canvas></div>
+        <div id="tablaTiempo" class="tabla-datos"></div>
+        <div id="totalTiempo" class="total-line"></div>
+        <button class="boton-descarga" id="pngTiempo">PNG</button>
+      </div>
+    </div>
+    <div class="charts-row">
+      <div class="grafico">
+        <strong>Clasificación / Claims</strong>
+        <div class="canvas-wrap claims" id="wrapGraficoClaims"><canvas id="graficoClaims"></canvas></div>
+        <div id="tablaClaims" class="tabla-datos"></div>
+        <div id="totalClaims" class="total-line"></div>
+        <button class="boton-descarga" id="pngClaims">PNG</button>
+      </div>
+      <div>
+        <div class="efectividad-box"><div class="valor" id="valorEfectividad">-</div><div class="titulo">EFECTIVIDAD DEL MES</div></div>
+        <div class="efectividad-box" style="margin-top:16px"><div class="valor" id="valorEfectividadTiempo">-</div><div class="titulo">EFECTIVIDAD POR TIEMPO</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pegar" class="page">
+  <div class="page-head"><h1>Pegar bases</h1></div>
+  <div class="paste-grid">
+    <div class="panel paste-menu">
+      <button class="active" data-paste="normal">Base Oriflame</button>
+      <button data-paste="servi">Base Servientrega</button>
+      <button data-paste="tc">Total Control</button>
+    </div>
+    <div class="panel paste-card">
+      <div id="paste-normal">
+        <h3>Base Oriflame</h3>
+        <div class="file-row"><input type="file" id="fileNormal" accept=".xlsx,.xlsm,.xls"><button class="btn" id="loadNormalFile">Cargar Excel</button></div>
+        <textarea id="txtNormal" placeholder="Pega aquí la base de Oriflame"></textarea>
+        <div class="paste-actions"><button class="btn btn-green" id="processNormal">Procesar base Oriflame</button></div>
+        <div class="result-box" id="resNormal"></div>
+      </div>
+      <div id="paste-servi" style="display:none">
+        <h3>Base Servientrega</h3>
+        <div class="file-row"><input type="file" id="fileServi" accept=".xlsx,.xlsm,.xls"><button class="btn" id="loadServiFile">Cargar Excel</button></div>
+        <textarea id="txtServi" placeholder="Pega aquí la base de Servientrega"></textarea>
+        <div class="paste-actions"><button class="btn btn-green" id="processServi">Actualizar status</button></div>
+        <div class="result-box" id="resServi"></div>
+      </div>
+      <div id="paste-tc" style="display:none">
+        <h3>Total Control</h3>
+        <div class="file-row"><input type="file" id="fileTc" accept=".xlsx,.xlsm,.xls"><button class="btn" id="loadTcFile">Cargar Excel</button></div>
+        <textarea id="txtTc" placeholder="Pega aquí Total Control"></textarea>
+        <div class="paste-actions"><button class="btn btn-green" id="processTc">Procesar Total Control</button></div>
+        <div class="result-box" id="resTc"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="infobip" class="page">
+  <div class="page-head"><h1>INFOBIP</h1></div>
+  <div class="panel toolbar">
+    <div class="field"><label>Mes</label><select id="iMonth"></select></div>
+    <div class="field"><label>Fecha guía</label><input type="date" id="iDate"></div>
+    <div class="field"><label>Responsable</label><select id="iOwner"></select></div>
+    <div class="field"><label>Canal</label><select id="iChannel"><option value="">PUP + HD</option><option>PUP</option><option>HD</option></select></div>
+    <button class="btn btn-outline" id="selectInfo">☑ Seleccionar listos</button>
+    <button class="btn btn-green" id="copyInfo">📋 Copiar líneas</button>
+    <button class="btn" id="exportInfo">⬇ Excel INFOBIP</button>
+  </div>
+  <div class="stats">
+    <div class="panel stat"><div class="n" id="iPending">0</div><div class="t">NO ENTREGADOS</div></div>
+    <div class="panel stat"><div class="n" id="iReady">0</div><div class="t">LISTOS INFOBIP</div></div>
+    <div class="panel stat"><div class="n" id="iPickup">0</div><div class="t">RETIRO AGENCIA</div></div>
+    <div class="panel stat"><div class="n" id="iGeneral">0</div><div class="t">MENSAJE GENERAL</div></div>
+    <div class="panel stat"><div class="n" id="iMissing">0</div><div class="t">SIN DATOS</div></div>
+  </div>
+  <div class="panel" style="margin-bottom:10px">
+    <div style="padding:11px 12px;border-bottom:1px solid #e8f2ee;font-weight:900">Ingresando en Agencia</div>
+    <div class="table-wrap" style="max-height:360px"><table id="infoAgencyTable"></table></div>
+  </div>
+  <div class="panel">
+    <div style="padding:11px 12px;border-bottom:1px solid #e8f2ee;font-weight:900">Mensaje general 48–72h</div>
+    <div class="table-wrap" style="max-height:360px"><table id="infoGeneralTable"></table></div>
+  </div>
+</section>
+
+<section id="config" class="page">
+  <div class="page-head"><h1>Configuración</h1></div>
+  <div class="config-grid">
+    <div class="panel config-card">
+      <h3>Responsables</h3>
+      <div class="listbox" id="ownersList"></div>
+      <div class="addrow"><input id="newOwnerName" placeholder="Nombre"><input id="newOwnerPhone" placeholder="WhatsApp INFOBIP"><button class="btn btn-green" id="addOwner">Agregar</button></div>
+    </div>
+    <div class="panel config-card">
+      <h3>Clasificación / Claims</h3>
+      <div class="listbox" id="claimsList"></div>
+      <div class="addrow" style="grid-template-columns:1fr auto"><input id="newClaim" placeholder="Nueva clasificación"><button class="btn btn-green" id="addClaim">Agregar</button></div>
+    </div>
+    <div class="panel config-card full">
+      <h3>Provincias / ciudades / sectores → Responsable</h3>
+      <div class="listbox" id="zonesList"></div>
+      <div class="addrow"><input id="newZone" placeholder="Provincia / ciudad / sector"><select id="newZoneOwner"></select><button class="btn btn-green" id="addZone">Agregar</button></div>
+    </div>
+    <div class="panel config-card full">
+      <h3>Maestro de Contactos</h3>
+      <div class="contact-tools"><input id="contactSearch" placeholder="Buscar socio o celular"></div>
+      <div class="listbox" id="contactsList"></div>
+      <div class="addrow"><input id="newSocio" placeholder="Código socio"><input id="newPhone" placeholder="Celular"><button class="btn btn-green" id="addContact">Agregar / actualizar</button></div>
+    </div>
+
+    <div class="panel config-card full">
+      <h3>Reglas de efectividad</h3>
+      <div class="rules-grid">
+        <div class="rule-box">
+          <h4>📅 Feriados · FECHA GUIA</h4>
+          <div class="addrow">
+            <input type="date" id="holidayDate">
+            <input type="number" id="holidayDays" value="1" min="0" step="1" title="Días a restar">
+            <button class="btn btn-green" id="addHoliday">Agregar</button>
+          </div>
+          <div class="rule-note">Si la FECHA GUIA coincide con el feriado, se restan estos días al cálculo de entrega, sin bajar de 0.</div>
+          <div class="listbox" id="holidaysList" style="margin-top:9px;max-height:190px"></div>
+        </div>
+        <div class="rule-box">
+          <h4>🚚 Regla PUP</h4>
+          <div class="addrow" style="grid-template-columns:1fr auto">
+            <input type="number" id="pupDaysConfig" value="1" min="0" step="1">
+            <button class="btn btn-green" id="savePupRule">Guardar</button>
+          </div>
+          <div class="rule-note">Para PUP, la fecha efectiva de entrega se calcula desde FECHA GUIA + los días configurados. Esta regla se usa en Dashboard y al cerrar el mes.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel config-card full">
+      <h3>Reglas de canal</h3>
+      <div class="listbox">
+        <div class="listrow" style="grid-template-columns:1fr 1fr"><strong>500–599</strong><span>PUP</span></div>
+        <div class="listrow" style="grid-template-columns:1fr 1fr"><strong>5000–5999</strong><span>PUP</span></div>
+        <div class="listrow" style="grid-template-columns:1fr 1fr"><strong>600–799</strong><span>SPO</span></div>
+        <div class="listrow" style="grid-template-columns:1fr 1fr"><strong>5+ dígitos</strong><span>HD</span></div>
+      </div>
+    </div>
+    <div class="panel config-card full">
+      <h3>Datos locales</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="exportBackup">Exportar respaldo</button><label class="btn" for="importBackup">Importar respaldo</label><input id="importBackup" type="file" accept=".json" style="display:none"><button class="btn btn-danger" id="clearOrders">Borrar pedidos abiertos</button></div>
+    </div>
+  </div>
+</section>
+</main>
+</div>
+
+<div class="modal-bg" id="socioModal"><div class="modal"><h3>Datos del socio</h3><dl id="socioBody"></dl><div class="modal-actions"><button class="btn btn-green" id="closeSocio">Cerrar</button></div></div></div>
+<div class="modal-bg" id="replaceOwnerModal">
+  <div class="modal">
+    <h3>Reemplazar responsable</h3>
+    <div id="replaceOwnerSummary" style="font-size:11px;color:#5a6964;margin-bottom:12px"></div>
+    <input type="hidden" id="replaceOwnerIndex">
+    <div class="field" style="margin-bottom:9px"><label>Nuevo responsable</label><input id="replaceOwnerName" style="width:100%;height:36px;border:1px solid #bfd5cd;border-radius:8px;padding:0 9px"></div>
+    <div class="field"><label>WhatsApp INFOBIP</label><input id="replaceOwnerPhone" style="width:100%;height:36px;border:1px solid #bfd5cd;border-radius:8px;padding:0 9px"></div>
+    <div class="modal-actions"><button class="btn" id="cancelReplaceOwner">Cancelar</button> <button class="btn btn-green" id="confirmReplaceOwner">Reemplazar</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY='servientrega_oriflame_real_v1';
+const DEFAULT_ZONES=[{"zone": "AZUAY", "owner": "Alba"}, {"zone": "CUENCA", "owner": "Alba"}, {"zone": "LOJA- EL SAGRARIO", "owner": "Alba"}, {"zone": "CHORDELEG", "owner": "Alba"}, {"zone": "BOLIVAR", "owner": "Alba"}, {"zone": "CANAR", "owner": "Alba"}, {"zone": "CAÑAR", "owner": "Alba"}, {"zone": "AZOGUEZ", "owner": "Alba"}, {"zone": "CARCHI", "owner": "Alba"}, {"zone": "RIOBAMBA", "owner": "Alba"}, {"zone": "GALAPAGOS", "owner": "Alba"}, {"zone": "LOJA", "owner": "Alba"}, {"zone": "LOS RIOS", "owner": "Alba"}, {"zone": "EL CHACO", "owner": "Alba"}, {"zone": "NAPO", "owner": "Alba"}, {"zone": "PASTAZA", "owner": "Alba"}, {"zone": "PUYO", "owner": "Alba"}, {"zone": "PICHINCHA", "owner": "Alba"}, {"zone": "QUITO", "owner": "Alba"}, {"zone": "VALLE DE LOS CHILLOS", "owner": "Alba"}, {"zone": "SANTA ELENA", "owner": "Alba"}, {"zone": "TUNGURAHUA", "owner": "Alba"}, {"zone": "AMBATO", "owner": "Alba"}, {"zone": "PROGRESO", "owner": "Alba"}, {"zone": "GUARANDA", "owner": "Alba"}, {"zone": "COTOPAXI", "owner": "Alba"}, {"zone": "DURAN", "owner": "Daysi"}, {"zone": "ZAMORA CHINCHIPE", "owner": "Daysi"}, {"zone": "GUAYAS", "owner": "Daysi"}, {"zone": "ZAMORA", "owner": "Daysi"}, {"zone": "CHIMBORAZO", "owner": "Daysi"}, {"zone": "EL GUANO", "owner": "Daysi"}, {"zone": "MORONA SANTIAGO", "owner": "Daysi"}, {"zone": "EL ORO", "owner": "Daysi"}, {"zone": "ELORO", "owner": "Daysi"}, {"zone": "ESMERALDAS", "owner": "Daysi"}, {"zone": "COLIMES", "owner": "Daysi"}, {"zone": "GUAYAQUIL", "owner": "Daysi"}, {"zone": "MILAGRO", "owner": "Daysi"}, {"zone": "POSORJA", "owner": "Daysi"}, {"zone": "NARANJITO", "owner": "Daysi"}, {"zone": "TENGUEL", "owner": "Daysi"}, {"zone": "NARANJAL", "owner": "Daysi"}, {"zone": "PEDRO CARBO", "owner": "Daysi"}, {"zone": "GUAYAQUILHUERTA FRENTE A PARADA DE LA METROVIA", "owner": "Daysi"}, {"zone": "EL TRIUNFO", "owner": "Daysi"}, {"zone": "DAULE", "owner": "Daysi"}, {"zone": "SAMBORONDON", "owner": "Daysi"}, {"zone": "VIRGEN DE FATIMA KM 26", "owner": "Daysi"}, {"zone": "PALESTINA", "owner": "Daysi"}, {"zone": "LOMAS DE SARGENTILLO", "owner": "Daysi"}, {"zone": "ISIDRO AYORA", "owner": "Daysi"}, {"zone": "BALZAR", "owner": "Daysi"}, {"zone": "SALITRE", "owner": "Daysi"}, {"zone": "YAGUACHI", "owner": "Daysi"}, {"zone": "BUCAY", "owner": "Daysi"}, {"zone": "IMBABURA", "owner": "Daysi"}, {"zone": "IBARRA", "owner": "Daysi"}, {"zone": "MANABI", "owner": "Daysi"}, {"zone": "JIPIJAPA", "owner": "Daysi"}, {"zone": "EL CARMEN", "owner": "Daysi"}, {"zone": "MOMPICHE", "owner": "Daysi"}, {"zone": "ORELLANA", "owner": "Daysi"}, {"zone": "SANTO DOMINGO", "owner": "Daysi"}, {"zone": "SANTO DOMINGO DE LOS TSACHILAS", "owner": "Daysi"}, {"zone": "SUCUMBIOS", "owner": "Daysi"}, {"zone": "PIMAMPIRO", "owner": "Daysi"}, {"zone": "JUJAN", "owner": "Daysi"}];
+const DEFAULT_CLAIMS=[{"name": "FUERA DE COBERTURA", "desc": "No llega el camión al sector"}, {"name": "CAMBIO DE DIRECCIÓN", "desc": "Cliente o socio solicita cambio de domicilio"}, {"name": "NUMERO EQUIVOCADO", "desc": "Número de celular equivocado"}, {"name": "CAMBIO A PUP", "desc": "Cliente no está en domicilio y solicita retiro de oficina"}, {"name": "ZONA PELIGROSA", "desc": "La zona es de alto riesgo y el camión no puede ingresar"}, {"name": "DEVOLUCION DE OFICINA", "desc": "El cliente no retiró su pedido en la oficina dentro del plazo"}, {"name": "DEVOLUCION AL REMITENTE", "desc": "Devolución por solicitud de Oriflame o por intentos de entrega"}, {"name": "DEVOLUCION CLIENTE NO DESEA", "desc": "Cliente no desea o no ha realizado pedido"}, {"name": "DEVOLUCION CLIENTE NO RETIRA", "desc": "Cliente no se ha acercado a retirar su pedido"}, {"name": "DIRECCION INCORRECTA", "desc": "Dirección proporcionada en la guía está incorrecta"}, {"name": "DATOS INCOMPLETOS", "desc": "Información de la guía insuficiente"}, {"name": "CIERRE DE VIAS", "desc": "Calles afectadas"}, {"name": "TRAYECTO ESPECIAL", "desc": "Cobertura uno o dos días por semana"}, {"name": "NO HAY QUIEN RECIBA", "desc": "No hay quien reciba en el domicilio"}, {"name": "NO CONTESTA", "desc": "No contesta para coordinar entrega"}, {"name": "SINIESTRO", "desc": "Siniestro de carga"}, {"name": "CELULAR INCORRECTO", "desc": "No registra WhatsApp o está equivocado"}, {"name": "NOVEDAD COURIER", "desc": "Novedad atribuible a Servientrega"}, {"name": "Cierre de vías2", "desc": "Deslizamientos de tierra"}, {"name": "BLOQUEO DE VÍAS", "desc": "Bloqueo por manifestación"}];
+const CANTON_PROV={"CUENCA": "AZUAY", "GIRON": "AZUAY", "GUALACEO": "AZUAY", "NABON": "AZUAY", "PAUTE": "AZUAY", "PUCARA": "AZUAY", "SAN FERNANDO": "AZUAY", "SANTA ISABEL": "AZUAY", "SIGSIG": "AZUAY", "ONA": "AZUAY", "CHORDELEG": "AZUAY", "EL PAN": "AZUAY", "SEVILLA DE ORO": "AZUAY", "GUACHAPALA": "AZUAY", "CAMILO PONCE ENRIQUEZ": "AZUAY", "GUARANDA": "BOLIVAR", "CHILLANES": "BOLIVAR", "CHIMBO": "BOLIVAR", "ECHEANDIA": "BOLIVAR", "SAN MIGUEL": "BOLIVAR", "CALUMA": "BOLIVAR", "LAS NAVES": "BOLIVAR", "AZOGUES": "CANAR", "BIBLIAN": "CANAR", "CANAR": "CANAR", "LA TRONCAL": "CANAR", "EL TAMBO": "CANAR", "DELEG": "CANAR", "SUSCAL": "CANAR", "TULCAN": "CARCHI", "BOLIVAR": "MANABI", "ESPEJO": "CARCHI", "MIRA": "CARCHI", "MONTUFAR": "CARCHI", "SAN PEDRO DE HUACA": "CARCHI", "LATACUNGA": "COTOPAXI", "LA MANA": "COTOPAXI", "PANGUA": "COTOPAXI", "PUJILI": "COTOPAXI", "SALCEDO": "COTOPAXI", "SAQUISILI": "COTOPAXI", "SIGCHOS": "COTOPAXI", "RIOBAMBA": "CHIMBORAZO", "ALAUSI": "CHIMBORAZO", "COLTA": "CHIMBORAZO", "CHAMBO": "CHIMBORAZO", "GUAMOTE": "CHIMBORAZO", "GUANO": "CHIMBORAZO", "PALLATANGA": "CHIMBORAZO", "PENIPE": "CHIMBORAZO", "CUMANDA": "CHIMBORAZO", "MACHALA": "EL ORO", "ARENILLAS": "EL ORO", "ATAHUALPA": "EL ORO", "BALSAS": "EL ORO", "CHILLA": "EL ORO", "EL GUABO": "EL ORO", "HUAQUILLAS": "EL ORO", "MARCABELI": "EL ORO", "PASAJE": "EL ORO", "PINAS": "EL ORO", "PORTOVELO": "EL ORO", "SANTA ROSA": "EL ORO", "ZARUMA": "EL ORO", "LAS LAJAS": "EL ORO", "ESMERALDAS": "ESMERALDAS", "ELOY ALFARO": "ESMERALDAS", "MUISNE": "ESMERALDAS", "QUININDE": "ESMERALDAS", "SAN LORENZO": "ESMERALDAS", "ATACAMES": "ESMERALDAS", "RIOVERDE": "ESMERALDAS", "GUAYAQUIL": "GUAYAS", "ALFREDO BAQUERIZO MORENO": "GUAYAS", "BALAO": "GUAYAS", "BALZAR": "GUAYAS", "COLIMES": "GUAYAS", "DAULE": "GUAYAS", "DURAN": "GUAYAS", "EL EMPALME": "GUAYAS", "ISIDRO AYORA": "GUAYAS", "LOMAS DE SARGENTILLO": "GUAYAS", "MILAGRO": "GUAYAS", "NARANJAL": "GUAYAS", "NARANJITO": "GUAYAS", "PALESTINA": "GUAYAS", "PEDRO CARBO": "GUAYAS", "PLAYAS": "GUAYAS", "SAMBORONDON": "GUAYAS", "SANTA LUCIA": "GUAYAS", "SALITRE": "GUAYAS", "SIMON BOLIVAR": "GUAYAS", "YAGUACHI": "GUAYAS", "POSORJA": "GUAYAS", "IBARRA": "IMBABURA", "ANTONIO ANTE": "IMBABURA", "COTACACHI": "IMBABURA", "OTAVALO": "IMBABURA", "PIMAMPIRO": "IMBABURA", "SAN MIGUEL DE URCUQUI": "IMBABURA", "LOJA": "LOJA", "CALVAS": "LOJA", "CATAMAYO": "LOJA", "CELICA": "LOJA", "ESPINDOLA": "LOJA", "GONZANAMA": "LOJA", "MACARA": "LOJA", "OLMEDO": "MANABI", "PALTAS": "LOJA", "PUYANGO": "LOJA", "QUILANGA": "LOJA", "SARAGURO": "LOJA", "SOZORANGA": "LOJA", "ZAPOTILLO": "LOJA", "BABAHOYO": "LOS RIOS", "BABA": "LOS RIOS", "BUENA FE": "LOS RIOS", "MONTALVO": "LOS RIOS", "PUEBLOVIEJO": "LOS RIOS", "QUEVEDO": "LOS RIOS", "URDANETA": "LOS RIOS", "VENTANAS": "LOS RIOS", "VINCES": "LOS RIOS", "PALENQUE": "LOS RIOS", "QUINSALOMA": "LOS RIOS", "VALENCIA": "LOS RIOS", "PORTOVIEJO": "MANABI", "CHONE": "MANABI", "EL CARMEN": "MANABI", "FLAVIO ALFARO": "MANABI", "JIPIJAPA": "MANABI", "JUNIN": "MANABI", "MANTA": "MANABI", "MONTECRISTI": "MANABI", "PAJAN": "MANABI", "PICHINCHA": "MANABI", "ROCAFUERTE": "MANABI", "SANTA ANA": "MANABI", "SUCRE": "MANABI", "TOSAGUA": "MANABI", "24 DE MAYO": "MANABI", "PEDERNALES": "MANABI", "PUERTO LOPEZ": "MANABI", "JAMA": "MANABI", "JARAMIJO": "MANABI", "SAN VICENTE": "MANABI", "MORONA": "MORONA SANTIAGO", "GUALAQUIZA": "MORONA SANTIAGO", "LIMON INDANZA": "MORONA SANTIAGO", "PALORA": "MORONA SANTIAGO", "SANTIAGO": "MORONA SANTIAGO", "SUCUA": "MORONA SANTIAGO", "HUAMBOYA": "MORONA SANTIAGO", "SAN JUAN BOSCO": "MORONA SANTIAGO", "TAISHA": "MORONA SANTIAGO", "LOGRONO": "MORONA SANTIAGO", "PABLO SEXTO": "MORONA SANTIAGO", "TIWINTZA": "MORONA SANTIAGO", "TENA": "NAPO", "ARCHIDONA": "NAPO", "EL CHACO": "NAPO", "QUIJOS": "NAPO", "CARLOS JULIO AROSEMENA TOLA": "NAPO", "ORELLANA": "ORELLANA", "AGUARICO": "ORELLANA", "LA JOYA DE LOS SACHAS": "ORELLANA", "LORETO": "ORELLANA", "PASTAZA": "PASTAZA", "MERA": "PASTAZA", "SANTA CLARA": "PASTAZA", "ARAJUNO": "PASTAZA", "QUITO": "PICHINCHA", "CAYAMBE": "PICHINCHA", "MEJIA": "PICHINCHA", "PEDRO MONCAYO": "PICHINCHA", "RUMINAHUI": "PICHINCHA", "PEDRO VICENTE MALDONADO": "PICHINCHA", "PUERTO QUITO": "PICHINCHA", "SAN MIGUEL DE LOS BANCOS": "PICHINCHA", "SANTO DOMINGO": "SANTO DOMINGO", "SANTO DOMINGO DE LOS TSACHILAS": "SANTO DOMINGO", "SANTA ELENA": "SANTA ELENA", "LA LIBERTAD": "SANTA ELENA", "SALINAS": "SANTA ELENA", "LAGO AGRIO": "SUCUMBIOS", "GONZALO PIZARRO": "SUCUMBIOS", "PUTUMAYO": "SUCUMBIOS", "SHUSHUFINDI": "SUCUMBIOS", "SUCUMBIOS": "SUCUMBIOS", "CASCALES": "SUCUMBIOS", "CUYABENO": "SUCUMBIOS", "AMBATO": "TUNGURAHUA", "BANOS DE AGUA SANTA": "TUNGURAHUA", "CEVALLOS": "TUNGURAHUA", "MOCHA": "TUNGURAHUA", "PATATE": "TUNGURAHUA", "QUERO": "TUNGURAHUA", "SAN PEDRO DE PELILEO": "TUNGURAHUA", "SANTIAGO DE PILLARO": "TUNGURAHUA", "TISALEO": "TUNGURAHUA", "ZAMORA": "ZAMORA CHINCHIPE", "CHINCHIPE": "ZAMORA CHINCHIPE", "NANGARITZA": "ZAMORA CHINCHIPE", "YACUAMBI": "ZAMORA CHINCHIPE", "YANTZAZA": "ZAMORA CHINCHIPE", "EL PANGUI": "ZAMORA CHINCHIPE", "CENTINELA DEL CONDOR": "ZAMORA CHINCHIPE", "PALANDA": "ZAMORA CHINCHIPE", "PAQUISHA": "ZAMORA CHINCHIPE"};
+const PROVINCIAS=["AZUAY", "BOLIVAR", "CANAR", "CARCHI", "COTOPAXI", "CHIMBORAZO", "EL ORO", "ESMERALDAS", "GALAPAGOS", "GUAYAS", "IMBABURA", "LOJA", "LOS RIOS", "MANABI", "MORONA SANTIAGO", "NAPO", "ORELLANA", "PASTAZA", "PICHINCHA", "SANTA ELENA", "SANTO DOMINGO", "SUCUMBIOS", "TUNGURAHUA", "ZAMORA CHINCHIPE"];
+function freshDB(){return{version:2,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
+function normalizeDB(x){x=x||freshDB();x.version=2;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
+function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
+let db=loadDB(),activeOwner='TODOS',pendingFirst=false,workingGuide='',chartTiempo=null,chartClaims=null;
+const $=id=>document.getElementById(id);
+
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyAc9fcVaHVRqIzp6Nwl56KGNpYcILfFgeM",
+  authDomain:"laar-courier-gestion.firebaseapp.com",
+  projectId:"laar-courier-gestion",
+  storageBucket:"laar-courier-gestion.firebasestorage.app",
+  messagingSenderId:"566693500762",
+  appId:"1:566693500762:web:07644208d73ff371770563"
+};
+const FB={
+  config:'servientrega_configuracion',
+  orders:'servientrega_pedidos',
+  contacts:'servientrega_contactos',
+  tc:'servientrega_fuentes_tc',
+  servi:'servientrega_fuentes_servientrega',
+  guidePhones:'servientrega_guia_contactos',
+  snapshots:'servientrega_cierres'
+};
+const SYNC_CHANNEL_NAME='servientrega_oriflame_global_sync_v2';
+let syncChannel=null,fsDB=null,firebaseReady=false,cloudApplying=false,cloudSyncTimer=null,cloudSyncRunning=false;
+let cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
+try{if('BroadcastChannel'in window)syncChannel=new BroadcastChannel(SYNC_CHANNEL_NAME)}catch(e){}
+
+function setCloudStatus(text,state=''){const el=$('cloudStatus');if(!el)return;el.textContent=text;el.style.color=state==='error'?'#ffd5d5':state==='saving'?'#fff2b2':'#fff'}
+function localCache(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(db))}catch(e){}}
+function stableJSON(v){try{return JSON.stringify(v??null)}catch(e){return''}}
+function safeDocId(v){return encodeURIComponent(String(v??'')).replace(/%2F/gi,'%252F')}
+function cleanCloudValue(v){return JSON.parse(JSON.stringify(v??{}))}
+function meaningfulLocal(x){return Object.keys(x.orders||{}).length||Object.keys(x.contacts||{}).length||Object.keys(x.snapshots||{}).length||Object.keys(x.sources?.tc||{}).length||Object.keys(x.sources?.servi||{}).length}
+function saveDB(){
+  db._updatedAt=Date.now();
+  localCache();
+  try{syncChannel?.postMessage({type:'db-updated',at:db._updatedAt})}catch(e){}
+  if(firebaseReady&&!cloudApplying)scheduleCloudSync();
+}
+function scheduleCloudSync(){
+  clearTimeout(cloudSyncTimer);
+  setCloudStatus('Firebase: guardando...','saving');
+  cloudSyncTimer=setTimeout(syncDBToCloud,80);
+}
+function configPayload(){return cleanCloudValue({version:2,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
+function mapPayload(group,key,val){
+  const out=cleanCloudValue(val);
+  if(group==='orders'&&!out.guia)out.guia=key;
+  if(group==='contacts'&&!out.socio)out.socio=key;
+  if((group==='tc'||group==='servi'||group==='guidePhones')&&!out.guia)out.guia=key;
+  if(group==='snapshots'&&!out.month)out.month=key;
+  return out;
+}
+async function commitOps(ops){
+  for(let i=0;i<ops.length;i+=400){
+    const batch=fsDB.batch();
+    for(const op of ops.slice(i,i+400)){
+      const ref=fsDB.collection(op.collection).doc(safeDocId(op.key));
+      if(op.type==='delete')batch.delete(ref);else batch.set(ref,op.data,{merge:false});
+    }
+    await batch.commit();
+  }
+}
+function diffMapOps(group,collection,map){
+  const fp=cloudFP[group],ops=[],keys=new Set([...Object.keys(fp),...Object.keys(map||{})]);
+  for(const key of keys){
+    if(!Object.prototype.hasOwnProperty.call(map||{},key)){
+      if(Object.prototype.hasOwnProperty.call(fp,key))ops.push({type:'delete',collection,key});
+      continue;
+    }
+    const data=mapPayload(group,key,map[key]),s=stableJSON(data);
+    if(fp[key]!==s)ops.push({type:'set',collection,key,data});
+  }
+  return ops;
+}
+async function syncDBToCloud(){
+  if(!firebaseReady||cloudSyncRunning||cloudApplying)return;
+  cloudSyncRunning=true;
+  try{
+    const ops=[];
+    const cfg=configPayload(),cfgS=stableJSON(cfg);
+    if(cloudFP.config!==cfgS)ops.push({type:'set',collection:FB.config,key:'principal',data:cfg});
+    ops.push(...diffMapOps('orders',FB.orders,db.orders));
+    ops.push(...diffMapOps('contacts',FB.contacts,db.contacts));
+    ops.push(...diffMapOps('tc',FB.tc,db.sources.tc));
+    ops.push(...diffMapOps('servi',FB.servi,db.sources.servi));
+    ops.push(...diffMapOps('guidePhones',FB.guidePhones,db.sources.guidePhones));
+    ops.push(...diffMapOps('snapshots',FB.snapshots,db.snapshots));
+    if(ops.length)await commitOps(ops);
+    // Update local fingerprints immediately; listeners will confirm them as well.
+    cloudFP.config=cfgS;
+    for(const [group,map] of [['orders',db.orders],['contacts',db.contacts],['tc',db.sources.tc],['servi',db.sources.servi],['guidePhones',db.sources.guidePhones],['snapshots',db.snapshots]]){
+      cloudFP[group]={};
+      for(const [key,val] of Object.entries(map||{}))cloudFP[group][key]=stableJSON(mapPayload(group,key,val));
+    }
+    setCloudStatus('Firebase: conectado');
+  }catch(err){
+    console.error('Firebase sync',err);
+    setCloudStatus('Firebase: error al guardar','error');
+    toast('No se pudo guardar en Firebase');
+  }finally{cloudSyncRunning=false}
+}
+async function readCollection(collection,group){
+  const snap=await fsDB.collection(collection).get(),map={};
+  snap.forEach(doc=>{const d=doc.data()||{},key=String(d.guia||d.socio||d.month||decodeURIComponent(doc.id));map[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d))});
+  return map;
+}
+async function uploadInitialState(){
+  setCloudStatus('Firebase: migrando datos...','saving');
+  cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
+  await syncDBToCloud();
+}
+function applyConfigDoc(d){
+  if(!d)return;
+  db.owners=d.owners||db.owners;db.zones=d.zones||db.zones;db.claims=d.claims||db.claims;db.settings=d.settings||db.settings;
+  normalizeDB(db);
+}
+function setupCloudListeners(){
+  fsDB.collection(FB.config).doc('principal').onSnapshot(doc=>{
+    if(!doc.exists)return;const d=doc.data();cloudFP.config=stableJSON(d);cloudApplying=true;applyConfigDoc(d);localCache();renderAll();cloudApplying=false;
+  },err=>console.error(err));
+  const listenMap=(collection,group,target)=>{
+    fsDB.collection(collection).onSnapshot(snap=>{
+      cloudApplying=true;
+      for(const ch of snap.docChanges()){
+        const d=ch.doc.data()||{},key=String(d.guia||d.socio||d.month||decodeURIComponent(ch.doc.id));
+        if(ch.type==='removed'){delete target[key];delete cloudFP[group][key]}
+        else{target[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d))}
+      }
+      localCache();renderAll();cloudApplying=false;
+    },err=>{console.error(err);setCloudStatus('Firebase: conexión interrumpida','error')});
+  };
+  listenMap(FB.orders,'orders',db.orders);
+  listenMap(FB.contacts,'contacts',db.contacts);
+  listenMap(FB.tc,'tc',db.sources.tc);
+  listenMap(FB.servi,'servi',db.sources.servi);
+  listenMap(FB.guidePhones,'guidePhones',db.sources.guidePhones);
+  listenMap(FB.snapshots,'snapshots',db.snapshots);
+}
+async function initFirebase(){
+  try{
+    setCloudStatus('Firebase: conectando...');
+    const localBefore=normalizeDB(db);
+    if(!window.firebase)throw new Error('No cargó Firebase SDK');
+    if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
+    fsDB=firebase.firestore();
+    fsDB.settings({ignoreUndefinedProperties:true});
+    const cfgRef=fsDB.collection(FB.config).doc('principal');
+    const cfgDoc=await cfgRef.get();
+    firebaseReady=true;
+    if(!cfgDoc.exists){
+      // First Servientrega run in this Firebase project: migrate this browser's current data.
+      db=localBefore;
+      await uploadInitialState();
+      if(meaningfulLocal(localBefore))toast('Datos existentes migrados a Firebase');
+    }else{
+      const cloud=freshDB();
+      const [orders,contacts,tc,servi,guidePhones,snapshots]=await Promise.all([
+        readCollection(FB.orders,'orders'),readCollection(FB.contacts,'contacts'),
+        readCollection(FB.tc,'tc'),readCollection(FB.servi,'servi'),
+        readCollection(FB.guidePhones,'guidePhones'),readCollection(FB.snapshots,'snapshots')
+      ]);
+      const cfg=cfgDoc.data()||{};
+      cloud.owners=cfg.owners||cloud.owners;cloud.zones=cfg.zones||cloud.zones;cloud.claims=cfg.claims||cloud.claims;cloud.settings=cfg.settings||cloud.settings;
+      cloud.orders=orders;cloud.contacts=contacts;cloud.sources={tc,servi,guidePhones};cloud.snapshots=snapshots;
+      const cloudHasData=meaningfulLocal(cloud);
+      if(!cloudHasData&&meaningfulLocal(localBefore)){
+        // Protect against an empty Firebase configuration having been created from another PC first.
+        db=localBefore;
+        await uploadInitialState();
+        toast('Datos locales migrados a Firebase');
+      }else{
+        db=normalizeDB(cloud);
+        cloudFP.config=stableJSON(cfg);
+        localCache();
+      }
+    }
+    reconcileAll(false);
+    localCache();
+    renderAll();
+    setupCloudListeners();
+    scheduleCloudSync();
+    setCloudStatus('Firebase: conectado');
+  }catch(err){
+    console.error('Firebase init',err);
+    firebaseReady=false;
+    setCloudStatus('Firebase: modo local','error');
+    toast('Firebase no conectó; trabajando con copia local');
+    renderAll();
+  }
+}
+function toast(msg){const t=$('toast');t.textContent=msg;t.style.display='block';clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',2600)}
+function N(v){return(v==null?'':String(v)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim()}
+function canonHeader(v){return N(v).replace(/[^A-Z0-9]/g,'')}
+function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function cleanPhone(v){let d=String(v??'').replace(/\D/g,'');if(!d)return'';if(d.startsWith('593')&&d.length>=12)d='0'+d.slice(-9);else if(d.length===9&&d.startsWith('9'))d='0'+d;else if(d.length>10&&d.endsWith(d.slice(-10)))d=d.slice(-10);return d}
+function excelSerialToDate(n){if(!window.XLSX||typeof n!=='number')return null;const o=XLSX.SSF.parse_date_code(n);return o?new Date(o.y,o.m-1,o.d):null}
+function parseAnyDate(v){if(v==null||v==='')return null;if(v instanceof Date&&!isNaN(v))return v;if(typeof v==='number'){const d=excelSerialToDate(v);if(d)return d}const s=String(v).trim();if(!s)return null;if(/^\d{2}[\/\.\-]\d{2}[\/\.\-]\d{4}$/.test(s)){const p=s.split(/[\/\.\-]/).map(Number);return new Date(p[2],p[1]-1,p[0])}if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}const d=new Date(s);return isNaN(d)?null:d}
+function isoDate(v){const d=parseAnyDate(v);if(!d)return'';if(d.getFullYear()<2000)return'';return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function displayDate(v){const d=parseAnyDate(v);return d?`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`:''}
+function monthKey(v){const d=parseAnyDate(v);return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:''}
+function monthName(k){if(!k)return'Sin mes';const[y,m]=k.split('-');const names=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];return`${names[+m-1]} ${y}`}
+function channel(code){const s=String(code??'').trim(),n=Number(s);if((n>=500&&n<=599)||(n>=5000&&n<=5999))return'PUP';if(n>=600&&n<=799)return'SPO';if(s.length>=5)return'HD';return''}
+function isDeliveredStatus(status){const s=N(status);return /ENTREGAD/.test(s)||/ENTREGA (EXITOSA|EFECTIVA|REALIZADA|CONFIRMADA|COMPLETADA|FINALIZADA)/.test(s)||/RECIBIDO POR (CLIENTE|DESTINATARIO)/.test(s)}
+function isDelivered(o){return!!o.lockedDelivered||isDeliveredStatus(o.status)}
+function inAgencyStatus(status){const s=N(status);if(isDeliveredStatus(status))return false;return s.includes('INGRESANDO EN AGENCIA')||s.includes('DISPONIBLE EN AGENCIA')||s.includes('RECIBIDO EN AGENCIA')||s.includes('ARRIBO A AGENCIA')}
+function statusBadge(o){const s=N(o.status);if(isDelivered(o))return'b-ent';if(inAgencyStatus(o.status))return'b-agency';if(s.includes('DEVOL')||s.includes('RETORNO'))return'b-return';if(s.includes('RUTA')||s.includes('DISTRIBUCION')||s.includes('OPERATIVO')||s.includes('EMBARCANDO')||s.includes('TRANSITO'))return'b-route';if(!s)return'b-pend';return'b-neutral'}
+function workdaysDiff(a,b){a=parseAnyDate(a);b=parseAnyDate(b);if(!a||!b)return null;a=new Date(a.getFullYear(),a.getMonth(),a.getDate());b=new Date(b.getFullYear(),b.getMonth(),b.getDate());if(b<a)return 0;let n=0,d=new Date(a);while(d<b){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)n++}return n}
+function tiemposEntregaFromDias(d){if(d===null||d===undefined||d==='')return'No entregado';const n=Number(d);if(isNaN(n))return'No entregado';if(n===0)return'Menos de 24hrs';if(n===1)return'24hrs';if(n===2)return'48hrs';if(n===3)return'72hrs';if(n>=4)return'Más de 72hrs';return'No entregado'}
+function addCalendarDays(v,n){const d=parseAnyDate(v);if(!d)return null;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+Number(n||0))}
+function effectivenessDays(o){let d=null;if(o.canal==='PUP'){const synthetic=addCalendarDays(o.fechaGuia,db.settings?.pupDays??1);d=workdaysDiff(o.fechaGuia,synthetic)}else{if(!isDelivered(o))return null;d=workdaysDiff(o.fechaGuia,o.fechaEntrega)}if(d===null||d===undefined)return null;const fg=isoDate(o.fechaGuia);for(const h of (db.settings?.holidays||[])){if(h.date===fg)d=Math.max(0,d-Number(h.days||0))}return d}
+function deliveryTime(o){const d=effectivenessDays(o);return tiemposEntregaFromDias(d)}
+function canonProv(v){let p=N(v||'');if(p.includes('SANTO DOMINGO DE LOS TSACHILAS'))p='SANTO DOMINGO';if(PROVINCIAS.includes(p))return p;for(const c in CANTON_PROV){if(p.includes(c))return CANTON_PROV[c]}return p||'SIN PROVINCIA'}
+function inferProvince(o){const vals=[o.provincia,o.ciudad,o.barrio,o.direccion,o.destinatario];for(const v of vals){const p=canonProv(v);if(p&&p!=='SIN PROVINCIA'&&PROVINCIAS.includes(p))return p}return canonProv(o.provincia||o.ciudad||'')||'SIN PROVINCIA'}
+function assignOwner(o){const vals=[o.provincia,o.ciudad,o.barrio,o.direccion,o.destinatario].map(N).filter(Boolean);let best=null,bestScore=-1;for(const z of db.zones){const key=N(z.zone);if(!key)continue;for(let i=0;i<vals.length;i++){const v=vals[i];let score=-1;if(v===key)score=1000-key.length+i*-2;else if(v.includes(key))score=500+key.length-i*2;else if(key.includes(v)&&v.length>4)score=200+v.length;if(score>bestScore){bestScore=score;best=z.owner}}}return best||o.responsable||''}
+function ownerPhone(name){return db.owners.find(x=>x.name===name)?.phone||''}
+function isOffice(o){return o.canal==='PUP'||/OF\.\s*SERVIENTREGA|OFICINA|AGENCIA|CENTRO DE SERVICIO|SERVIENTREGA/.test(N(o.destinatario))}
+function registerContact(socio,phone,source='TC'){socio=String(socio??'').trim();phone=cleanPhone(phone);if(!socio||!phone)return false;const prev=db.contacts[socio];db.contacts[socio]={socio,phone,updated:new Date().toISOString().slice(0,10),source};return !prev||prev.phone!==phone}
+function rememberGuidePhone(guia,phone,source='Histórico'){guia=String(guia??'').trim();phone=cleanPhone(phone);if(!guia||!phone)return;db.sources.guidePhones[guia]={guia,phone,source,updatedAt:new Date().toISOString()}}
+function hydrateContact(o){if(!o.celular&&o.guia&&db.sources.guidePhones[o.guia]?.phone)o.celular=db.sources.guidePhones[o.guia].phone;if(!o.celular&&o.socio&&db.contacts[o.socio])o.celular=db.contacts[o.socio].phone;if(o.celular&&o.guia)rememberGuidePhone(o.guia,o.celular,'Pedido')}
+function applyTcSource(o){const s=db.sources.tc[o.guia];if(!s)return;if(s.socio)o.socio=s.socio;if(s.nombre)o.nombreSocio=s.nombre;if(s.referencia)o.referencia=s.referencia;if(s.phone)o.celular=s.phone}
+function applyServiSource(o){const s=db.sources.servi[o.guia];if(!s||isDelivered(o))return;if(s.status)o.status=s.status;if(s.fechaEntrega)o.fechaEntrega=s.fechaEntrega;if(isDeliveredStatus(o.status))o.lockedDelivered=true}
+function reconcileOrder(o){if(!o)return o;applyTcSource(o);applyServiSource(o);hydrateContact(o);if(o.socio&&db.contacts[o.socio]?.phone&&!o.celular)o.celular=db.contacts[o.socio].phone;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Reconciliación');return o}
+function reconcileAll(doSave=true){for(const o of Object.values(db.orders))reconcileOrder(o);if(doSave)saveDB()}
+function getObjValue(obj,aliases){const entries=Object.keys(obj||{}).map(k=>({raw:k,key:canonHeader(k),value:obj[k]}));const nonEmpty=v=>v!==null&&v!==undefined&&String(v).trim()!=='';for(const a of aliases){const key=canonHeader(a);const hit=entries.find(e=>e.key===key&&nonEmpty(e.value));if(hit)return hit.value}for(const a of aliases){const key=canonHeader(a);if(key.length<7)continue;const hit=entries.find(e=>nonEmpty(e.value)&&(e.key.startsWith(key)||key.startsWith(e.key)));if(hit)return hit.value}for(const a of aliases){const key=canonHeader(a);const hit=entries.find(e=>e.key===key);if(hit)return hit.value}return''}
+function parseTSV(text){const lines=String(text||'').replace(/\r/g,'').split('\n').filter(l=>l.trim());if(!lines.length)return[];let delim='\t';if(!lines[0].includes('\t')&&lines[0].includes(';'))delim=';';const rows=lines.map(l=>l.split(delim));const head=rows[0];return rows.slice(1).filter(r=>r.some(x=>String(x).trim())).map(r=>Object.fromEntries(head.map((h,i)=>[String(h).trim(),r[i]??''])))}
+async function rowsFromFile(input){const f=input.files?.[0];if(!f)throw new Error('Selecciona un archivo.');if(!window.XLSX)throw new Error('No se cargó el módulo Excel.');const buf=await f.arrayBuffer();const wb=XLSX.read(buf,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];return XLSX.utils.sheet_to_json(ws,{defval:'',raw:true})}
+function showResult(id,msg){const el=$(id);el.style.display='block';el.innerHTML=msg}
+function processNormalRows(rows){let created=0,updated=0,skipped=0,nonServi=0,unassigned=0,missingChannel=0;for(const r of rows){const courier=N(getObjValue(r,['COURIER']));if(courier&&!courier.includes('SERVIENTREGA')){nonServi++;continue}const guia=String(getObjValue(r,['NO GUIA','NO_GUIA','GUIA','WAYBILL_NUMBER'])).trim();if(!guia){skipped++;continue}const old=db.orders[guia]||{};const cod=String(getObjValue(r,['COD DISTR.','COD DISTR','COD_DISTR','SERVICE_CENTRE'])||old.codDistr||'').trim();const directCell=cleanPhone(getObjValue(r,['CELULAR','CELULAR13','TELEFONO_SOCIO']));const o={...old,guia,fechaGuia:isoDate(getObjValue(r,['FECHA GUIA','FECHA_GUIA','AWB_DATE','ENTRY_DATE'])||old.fechaGuia),codDistr:cod,destinatario:String(getObjValue(r,['NOMBRE DESTINATARIO','NOMBRE_DESTINATARIO','SERVICE_CENTRE_NAME'])||old.destinatario||'').trim(),direccion:String(getObjValue(r,['DIRECCION ENVIO','DIRECCIÓN ENVIO','DIRECCION ENVÍO','DIRECCIÓN ENVÍO','DIRECCION DE ENVIO','DIRECCIÓN DE ENVÍO','DIRECCION_ENVIO','DIRECCION','DIRECCIÓN','DIRECCIÒN','ADDRESS_LINE_1'])||old.direccion||'').trim(),barrio:String(getObjValue(r,['BARRIO','ADDRESS_LINE_2'])||old.barrio||'').trim(),telefono1:cleanPhone(getObjValue(r,['TELEFONO 1','TELEFONO_1','TELEFONO'])||old.telefono1),telefono2:cleanPhone(getObjValue(r,['TELEFONO 2','TELEFONO_2'])||old.telefono2),numeroOrden:String(getObjValue(r,['NUMERO DE ORDEN','NUMERO_DE_ORDEN','INVO_NUMBER'])||old.numeroOrden||'').trim(),orderDate:isoDate(getObjValue(r,['ORDER DATE','ORDER_DATE'])||old.orderDate),ciudad:String(getObjValue(r,['CIUDAD','CITY','ADDRESS_LINE_3'])||old.ciudad||'').trim(),provincia:String(getObjValue(r,['PROVINCIA','CITY_1'])||old.provincia||'').trim(),peso:getObjValue(r,['PESO'])||old.peso||'',bultos:getObjValue(r,['BULTOS'])||old.bultos||'',promesa:isoDate(getObjValue(r,['PROMESA DE ENTREGA','PROMESA_DE_ENTREGA'])||old.promesa),socio:String(getObjValue(r,['SOCIO','CODIGO11'])||old.socio||'').trim(),nombreSocio:String(getObjValue(r,['NOMBRE_SOCIO','NOMBRE12'])||old.nombreSocio||'').trim(),referencia:String(getObjValue(r,['REFERENCIAS','REFERENCIA','REFERENCIA23'])||old.referencia||'').trim(),celular:directCell||old.celular||'',status:old.status||'',fechaEntrega:old.fechaEntrega||'',clasificacion:old.clasificacion||'',lockedDelivered:!!old.lockedDelivered};if(directCell)rememberGuidePhone(guia,directCell,'Base Oriflame');o.canal=channel(cod);o.provincia=inferProvince(o);o.responsable=assignOwner(o);reconcileOrder(o);if(!o.canal)missingChannel++;if(!o.responsable)unassigned++;if(old.guia)updated++;else created++;db.orders[guia]=o}saveDB();return{created,updated,skipped,nonServi,unassigned,missingChannel}}
+function processServiRows(rows){let updated=0,locked=0,notFound=0,empty=0,deliveredNow=0,stored=0;for(const r of rows){const guia=String(getObjValue(r,['guia','GUIA','cuenta'])).trim();if(!guia){empty++;continue}const st=String(getObjValue(r,['motivo','MOTIVO','status','estado'])).trim();const fe=isoDate(getObjValue(r,['fecha_entrega','FECHA ENTREGA','FECHA_ENTREGA']));const prev=db.sources.servi[guia]||{};db.sources.servi[guia]={guia,status:st||prev.status||'',fechaEntrega:fe||prev.fechaEntrega||'',updatedAt:new Date().toISOString()};stored++;const o=db.orders[guia];if(!o){notFound++;continue}if(isDelivered(o)){o.lockedDelivered=true;locked++;continue}const before=isDelivered(o);reconcileOrder(o);if(!before&&isDelivered(o))deliveredNow++;updated++}saveDB();return{updated,locked,notFound,empty,deliveredNow,stored}}
+function processTcRows(rows){let guideMatches=0,masterAdded=0,masterUpdated=0,serviRows=0,stored=0;const touchedSocios=new Set();for(const r of rows){const courier=N(getObjValue(r,['COURIER']));if(courier&&courier.includes('SERVIENTREGA'))serviRows++;const guia=String(getObjValue(r,['WAYBILL_NUMBER','GUIA'])).trim();const socio=String(getObjValue(r,['SOCIO'])).trim();const nombre=String(getObjValue(r,['NOMBRE_SOCIO'])).trim();const phone=cleanPhone(getObjValue(r,['TELEFONO_SOCIO']));const ref=String(getObjValue(r,['REFERENCIAS'])).trim();if(socio&&phone){const had=db.contacts[socio]?.phone;registerContact(socio,phone,'TC');touchedSocios.add(socio);if(had&&had!==phone)masterUpdated++;else if(!had)masterAdded++}if(guia){const prev=db.sources.tc[guia]||{};db.sources.tc[guia]={guia,socio:socio||prev.socio||'',nombre:nombre||prev.nombre||'',phone:phone||prev.phone||'',referencia:ref||prev.referencia||'',updatedAt:new Date().toISOString()};if(phone)rememberGuidePhone(guia,phone,'TC');stored++;if(db.orders[guia]){reconcileOrder(db.orders[guia]);guideMatches++}}}let recovered=0;for(const o of Object.values(db.orders)){const before=o.celular;if(o.socio&&touchedSocios.has(o.socio)&&db.contacts[o.socio]?.phone)o.celular=db.contacts[o.socio].phone;reconcileOrder(o);if(!before&&o.celular)recovered++}saveDB();return{guideMatches,masterAdded,masterUpdated,recovered,serviRows,stored}}
+function openMonths(){return[...new Set(Object.values(db.orders).map(o=>monthKey(o.fechaGuia)).filter(Boolean))].sort().reverse()}
+function dashboardMonths(){return[...new Set([...openMonths(),...Object.keys(db.snapshots||{})])].sort().reverse()}
+function ensureMonthSelects(){const open=openMonths(),dash=dashboardMonths();const pOld=$('pMonth').value,iOld=$('iMonth').value,dOld=$('dMonth').value;$('pMonth').innerHTML=open.length?open.map(m=>`<option value="${m}">${monthName(m)}</option>`).join(''):'<option value="">Sin datos</option>';$('iMonth').innerHTML=open.length?open.map(m=>`<option value="${m}">${monthName(m)}</option>`).join(''):'<option value="">Sin datos</option>';$('dMonth').innerHTML=dash.length?dash.map(m=>`<option value="${m}">${monthName(m)}${db.snapshots[m]?' · CERRADO':''}</option>`).join(''):'<option value="">Sin datos</option>';if(open.includes(pOld))$('pMonth').value=pOld;if(open.includes(iOld))$('iMonth').value=iOld;if(dash.includes(dOld))$('dMonth').value=dOld}
+function ensureServiStatusOptions(){const el=$('pServiStatus');if(!el)return;const old=el.value,m=$('pMonth').value;const statuses=[...new Set(Object.values(db.orders).filter(o=>!m||monthKey(o.fechaGuia)===m).map(o=>String(o.status||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));el.innerHTML='<option value="">Todos</option><option value="__EMPTY__">Sin status</option>'+statuses.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');if([...el.options].some(o=>o.value===old))el.value=old}
+function ownerCountRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);return Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)))}
+function renderOwnerTabs(){const own=db.owners.filter(o=>o.active).map(o=>o.name);if(activeOwner!=='TODOS'&&!own.includes(activeOwner))activeOwner='TODOS';const base=ownerCountRows(),counts={TODOS:base.length};own.forEach(name=>counts[name]=base.filter(o=>o.responsable===name).length);$('ownerTabs').innerHTML=['TODOS',...own].map(o=>`<button class="${o===activeOwner?'active':''}" data-owner="${escapeHtml(o)}">${escapeHtml(o)}<span class="owner-count">${counts[o]||0}</span></button>`).join('')}
+function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||o.responsable===activeOwner)&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(pendingFirst)rows.sort((a,b)=>Number(isDelivered(a))-Number(isDelivered(b))||String(a.fechaGuia).localeCompare(String(b.fechaGuia)));return rows}
+function pendingRowsForCopy(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);return Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||o.responsable===activeOwner)&&!isDelivered(o)&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q))).sort((a,b)=>String(a.fechaGuia).localeCompare(String(b.fechaGuia))||String(a.guia).localeCompare(String(b.guia)))}
+function claimOptions(selected=''){return'<option value=""></option>'+db.claims.map(c=>`<option value="${escapeHtml(c.name)}" ${c.name===selected?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
+function syncOrdersHScroll(){const wrap=$('ordersScrollWrap'),bar=$('ordersHScroll'),inner=$('ordersHScrollInner'),table=$('ordersTable');if(!wrap||!bar||!inner||!table)return;requestAnimationFrame(()=>{inner.style.width=Math.max(table.scrollWidth,wrap.clientWidth)+'px';bar.scrollLeft=wrap.scrollLeft});wrap.onscroll=()=>{if(Math.abs(bar.scrollLeft-wrap.scrollLeft)>1)bar.scrollLeft=wrap.scrollLeft};bar.onscroll=()=>{if(Math.abs(wrap.scrollLeft-bar.scrollLeft)>1)wrap.scrollLeft=bar.scrollLeft}}
+function renderOrders(){ensureServiStatusOptions();renderOwnerTabs();const rows=orderRows();const showOwner=activeOwner==='TODOS';$('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th>FECHA GUIA</th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>FECHA ENTREGA</th><th>DÍAS</th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>`<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatario||o.nombreSocio||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td>${escapeHtml(o.direccion||'')}</td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(o.provincia||'')}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${escapeHtml(o.responsable||'')}</td>`:''}<td><span class="badge ${statusBadge(o)}" title="${escapeHtml(o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span></td><td>${escapeHtml(displayDate(o.fechaEntrega))}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable" style="width:180px" data-edit="${o.guia}" data-field="clasificacion">${claimOptions(o.clasificacion||'')}</select></td></tr>`).join('')}</tbody>`;syncOrdersHScroll()}
+function startsIngresandoAgencia(status){return N(status).startsWith('INGRESANDO EN AGENCIA')}
+function infoMessage(o){const resp=ownerPhone(o.responsable);if(!o.socio)return{type:'Sin socio',ready:false,line:''};if(!o.celular)return{type:'Sin celular',ready:false,line:''};if(!resp)return{type:'Sin WhatsApp responsable',ready:false,line:''};if(startsIngresandoAgencia(o.status))return{type:'Retiro agencia',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} esta en agencia ${o.status} favor retirar,Whatsapp${resp}`};return{type:'General 48–72h',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} llegara en 48a72h estar pendiente Whatsapp${resp}`}}
+function infoRows(){const m=$('iMonth').value,d=$('iDate').value,own=$('iOwner').value,c=$('iChannel').value;return Object.values(db.orders).filter(o=>!isDelivered(o)&&['PUP','HD'].includes(o.canal)&&(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!own||o.responsable===own)&&(!c||o.canal===c)).map(o=>({...o,_msg:infoMessage(o)}))}
+function infoTableHtml(rows){return `<thead><tr><th>✓</th><th>GUIA</th><th>FECHA GUIA</th><th>SOCIO</th><th>CANAL</th><th>RESPONSABLE</th><th>STATUS</th><th>CELULAR</th><th>LÍNEA INFOBIP</th></tr></thead><tbody>${rows.map(o=>`<tr><td><input type="checkbox" class="info-check" data-guia="${o.guia}" ${o._msg.ready?'':'disabled'}></td><td>${escapeHtml(o.guia)}</td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.socio||'')}</td><td>${escapeHtml(o.canal)}</td><td>${escapeHtml(o.responsable||'')}</td><td><span class="badge ${statusBadge(o)}">${escapeHtml(o.status||'Pendiente')}</span></td><td>${escapeHtml(o.celular||'')}</td><td>${escapeHtml(o._msg.line||'')}</td></tr>`).join('')}</tbody>`}
+function renderInfo(){const rows=infoRows(),agency=rows.filter(o=>o._msg.type==='Retiro agencia'),general=rows.filter(o=>o._msg.type!=='Retiro agencia');$('iPending').textContent=rows.length;$('iReady').textContent=rows.filter(o=>o._msg.ready).length;$('iPickup').textContent=agency.filter(o=>o._msg.ready).length;$('iGeneral').textContent=general.filter(o=>o._msg.ready).length;$('iMissing').textContent=rows.filter(o=>!o._msg.ready).length;$('infoAgencyTable').innerHTML=agency.length?infoTableHtml(agency):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>';$('infoGeneralTable').innerHTML=general.length?infoTableHtml(general):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>'}
+function computeAgg(rows){const porProvincia={},porTiempo={},porClaim={},porCanal={HD:0,PUP:0,SPO:0};let total=rows.length,entregados=0;for(const o of rows){const prov=canonProv(o.provincia||o.ciudad);porProvincia[prov]=(porProvincia[prov]||0)+1;const t=deliveryTime(o);if(t)porTiempo[t]=(porTiempo[t]||0)+1;if(o.clasificacion)porClaim[o.clasificacion]=(porClaim[o.clasificacion]||0)+1;if(Object.prototype.hasOwnProperty.call(porCanal,o.canal))porCanal[o.canal]++;const noPorTiempo=N(t).includes('NO ENTREGADO')||t==='No entregado';const noServi=N(o.clasificacion).includes('NOVEDAD COURIER');if(!(noPorTiempo||noServi))entregados++}const okTiempo=(porTiempo['24hrs']||0)+(porTiempo['48hrs']||0)+(porTiempo['Menos de 24hrs']||0);const noTiempo=(porTiempo['72hrs']||0)+(porTiempo['Más de 72hrs']||0)+(porTiempo['No entregado']||porTiempo['NO ENTREGADO']||0);const totTiempo=okTiempo+noTiempo;return{porProvincia,porTiempo,porClaim,porCanal,total,entregados,efectividad:total?entregados*100/total:null,efectividadTiempo:totTiempo?okTiempo*100/totTiempo:null}}
+function dashboardData(){const m=$('dMonth').value;if(!m)return computeAgg([]);if(db.snapshots[m])return db.snapshots[m].agg;return computeAgg(Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m))}
+const DASH_PALETTE=['#00A651','#63C995','#4D8DCC','#F0B44D','#846FC7','#4FA9A3','#7E8F88','#9AA7A1'];
+function timeChartColor(label){const s=N(label);if(s.includes('NO ENTREGADO'))return'#7E8F88';if(s.includes('MENOS DE 24')||s.includes('<24'))return'#00A651';if(s.includes('24H'))return'#63C995';if(s.includes('48H'))return'#4D8DCC';if(s.includes('72H')&&!s.includes('MAS'))return'#F0B44D';if(s.includes('MAS DE 72')||s.includes('>72'))return'#C85F66';return'#6FAFA3'}
+function setChartPlaceholder(wrapId,msg){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<div class="chart-placeholder">${escapeHtml(msg||'Sin datos')}</div>`}
+function restoreChartCanvas(wrapId,canvasId,extraClass=''){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<canvas id="${canvasId}"></canvas>`;if(extraClass)wrap.className='canvas-wrap '+extraClass;else wrap.className='canvas-wrap'}
+function renderDashboard(){const m=$('dMonth').value,closed=!!db.snapshots[m];$('monthStatus').textContent=closed?'MES CERRADO':'MES ABIERTO';$('closeMonth').disabled=!m||closed;const agg=dashboardData();$('kpiHD').textContent=agg.porCanal.HD||0;$('kpiPUP').textContent=agg.porCanal.PUP||0;$('kpiSPO').textContent=agg.porCanal.SPO||0;const tp=Object.keys(agg.porProvincia).map(k=>({prov:k,cant:agg.porProvincia[k]})).sort((a,b)=>b.cant-a.cant);let htmlP='<div class="tabla-datos"><table><thead><tr><th>Provincia</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumP=0;for(const r of tp){const p=agg.total?Math.round(r.cant*1000/agg.total)/10:0;sumP+=p;htmlP+=`<tr><td>${escapeHtml(r.prov)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlP+='</tbody></table></div>';$('tablaProvincia').innerHTML=tp.length?htmlP:'<div class="empty">Sin datos</div>';$('totalProvincia').textContent=tp.length?`Total: ${Math.round(sumP*10)/10}%`:'';const arrT=Object.keys(agg.porTiempo).map(k=>({k,v:agg.porTiempo[k],p:agg.total?agg.porTiempo[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartTiempo){chartTiempo.destroy();chartTiempo=null}if(arrT.length){restoreChartCanvas('wrapGraficoTiempo','graficoTiempo');chartTiempo=new Chart($('graficoTiempo').getContext('2d'),{type:'bar',data:{labels:arrT.map(x=>x.k),datasets:[{data:arrT.map(x=>x.v),borderWidth:1,backgroundColor:arrT.map(x=>timeChartColor(x.k)),borderColor:arrT.map(x=>timeChartColor(x.k))}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:28}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#213',offset:-4,clamp:true,clip:false,formatter:v=>v}},scales:{x:{beginAtZero:true}}}});$('pngTiempo').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoTiempo','Sin datos');$('pngTiempo').style.display='none'}let htmlT='<div class="tabla-datos"><table><thead><tr><th>Tiempo de Entrega</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumT=0;for(const o of arrT){const p=Math.round(o.p*10)/10;sumT+=o.p;htmlT+=`<tr><td>${escapeHtml(o.k)}</td><td>${o.v}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlT+='</tbody></table></div>';$('tablaTiempo').innerHTML=arrT.length?htmlT:'<div class="empty">Sin datos</div>';$('totalTiempo').textContent=arrT.length?`Total: ${Math.round(sumT*10)/10}%`:'';const tc=Object.keys(agg.porClaim).map(k=>({claim:k,cant:agg.porClaim[k],p:agg.total?agg.porClaim[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartClaims){chartClaims.destroy();chartClaims=null}if(tc.length){restoreChartCanvas('wrapGraficoClaims','graficoClaims','claims');chartClaims=new Chart($('graficoClaims').getContext('2d'),{type:'bar',data:{labels:tc.map(x=>x.claim),datasets:[{data:tc.map(x=>x.cant),borderWidth:1,backgroundColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length]),borderColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length])}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});$('pngClaims').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoClaims','Sin datos');$('pngClaims').style.display='none'}let htmlC='<div class="tabla-datos"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumC=0;for(const r of tc){const p=Math.round(r.p*10)/10;sumC+=r.p;htmlC+=`<tr><td>${escapeHtml(r.claim)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlC+='</tbody></table></div>';$('tablaClaims').innerHTML=tc.length?htmlC:'<div class="empty">Sin datos</div>';$('totalClaims').textContent=tc.length?`Total: ${Math.round(sumC*10)/10}%`:'';$('valorEfectividad').textContent=agg.efectividad==null?'-':agg.efectividad.toFixed(1)+'%';$('valorEfectividadTiempo').textContent=agg.efectividadTiempo==null?'-':agg.efectividadTiempo.toFixed(1)+'%'}
+function renderConfig(){const active=db.owners.filter(o=>o.active);$('iOwner').innerHTML='<option value="">Todos</option>'+active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('newZoneOwner').innerHTML=active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('ownersList').innerHTML=db.owners.map((o,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><input data-owner-name="${i}" value="${escapeHtml(o.name)}"><input data-owner-phone="${i}" value="${escapeHtml(o.phone||'')}"><div class="owner-actions"><button class="btn owner-replace" data-owner-replace="${i}">♻ Reemplazar</button><button class="btn" data-owner-toggle="${i}">${o.active?'Desactivar':'Activar'}</button></div></div>`).join('');$('claimsList').innerHTML=db.claims.map((c,i)=>`<div class="listrow"><input data-claim-name="${i}" value="${escapeHtml(c.name)}"><input data-claim-desc="${i}" value="${escapeHtml(c.desc||'')}"><button class="btn btn-danger" data-claim-del="${i}">Eliminar</button></div>`).join('');$('zonesList').innerHTML=db.zones.map((z,i)=>`<div class="listrow"><input data-zone-name="${i}" value="${escapeHtml(z.zone)}"><select data-zone-owner="${i}">${active.map(o=>`<option ${o.name===z.owner?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select><button class="btn btn-danger" data-zone-del="${i}">Eliminar</button></div>`).join('');const hs=[...(db.settings?.holidays||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)));$('holidaysList').innerHTML=hs.length?hs.map((h,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><strong>${escapeHtml(displayDate(h.date))}</strong><span>-${Number(h.days||0)} día/s</span><button class="btn btn-danger" data-holiday-del="${escapeHtml(h.date)}">Eliminar</button></div>`).join(''):'<div class="empty">Sin feriados configurados</div>';$('pupDaysConfig').value=Number(db.settings?.pupDays??1);renderContacts();$('pClaim').innerHTML='<option value="">Todos</option>'+db.claims.map(c=>`<option>${escapeHtml(c.name)}</option>`).join('')}
+function renderContacts(){const q=N($('contactSearch').value),rows=Object.entries(db.contacts).filter(([s,c])=>!q||N(s+' '+c.phone).includes(q)).sort((a,b)=>String(b[1].updated||'').localeCompare(String(a[1].updated||'')));$('contactsList').innerHTML=rows.length?rows.map(([s,c])=>`<div class="listrow"><input value="${escapeHtml(s)}" disabled><input data-contact-phone="${escapeHtml(s)}" value="${escapeHtml(c.phone||'')}"><span style="font-size:10px;color:#697772">${escapeHtml(c.updated||'')} · ${escapeHtml(c.source||'')}</span></div>`).join(''):'<div class="empty">Sin contactos</div>'}
+function renderAll(){ensureMonthSelects();renderConfig();renderOrders();renderInfo();renderDashboard()}
+function reloadSharedDB(showToast=false){if(firebaseReady)return;const latest=loadDB();if((latest._updatedAt||0)>(db._updatedAt||0)){db=latest;renderAll();if(showToast)toast('Datos locales actualizados')}}
+window.addEventListener('storage',e=>{if(e.key===STORAGE_KEY)reloadSharedDB(true)});
+try{if(syncChannel)syncChannel.onmessage=e=>{if(e.data?.type==='db-updated'&&!firebaseReady)reloadSharedDB(true)}}catch(e){}
+
+function exportRows(rows,name){if(!window.XLSX)return alert('No se cargó el módulo Excel.');const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'DATA');XLSX.writeFile(wb,name)}
+function downloadPNG(id){const c=$(id),a=document.createElement('a');a.download=id+'.png';a.href=c.toDataURL('image/png');a.click()}
+Chart.register(ChartDataLabels);
+const SIDEBAR_STATE_KEY='servientrega_sidebar_collapsed';
+function setSidebarCollapsed(collapsed){
+  const root=$('appRoot'),btn=$('sidebarToggle');
+  if(!root||!btn)return;
+  root.classList.toggle('sidebar-collapsed',collapsed);
+  btn.textContent=collapsed?'›':'‹';
+  btn.title=collapsed?'Desplegar menú':'Plegar menú';
+  try{localStorage.setItem(SIDEBAR_STATE_KEY,collapsed?'1':'0')}catch(e){}
+}
+$('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot').classList.contains('sidebar-collapsed')));
+setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
+window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
+// Navegación
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='dashboard')setTimeout(renderDashboard,40)}));
+document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
+// Pedidos
+$('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders()});['pMonth','pDate','pChannel','pStatus','pServiStatus','pClaim'].forEach(id=>$(id).addEventListener('change',renderOrders));$('pSearch').addEventListener('input',renderOrders);$('pendingFirst').addEventListener('click',()=>{pendingFirst=!pendingFirst;$('pendingFirst').textContent=pendingFirst?'✓ Pendientes':'↑ Pendientes';renderOrders()});
+$('copyPending').addEventListener('click',async()=>{const rows=pendingRowsForCopy();if(!rows.length){toast('No hay pedidos pendientes con estos filtros');return}const headers=['GUIA','FECHA GUIA','COD DISTR.','NOMBRE DESTINATARIO','DIRECCIÓN','REFERENCIA','CELULAR','BARRIO','PROVINCIA','CANAL','RESPONSABLE','STATUS SERVIENTREGA'];const lines=[headers.join('\t'),...rows.map(o=>[o.guia,displayDate(o.fechaGuia),o.codDistr,o.destinatario||o.nombreSocio||'',o.direccion||'',o.referencia||'',o.celular||'',o.barrio||'',o.provincia||'',o.canal||'',o.responsable||'',o.status||'Pendiente'].map(v=>String(v??'').replace(/[\t\r\n]+/g,' ')).join('\t'))];const text=lines.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(rows.length+' pendientes copiados')});$('clearFilters').addEventListener('click',()=>{$('pDate').value='';$('pChannel').value='';$('pStatus').value='';$('pServiStatus').value='';$('pClaim').value='';$('pSearch').value='';renderOrders()});$('ordersTable').addEventListener('click',e=>{const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio];$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Socio</dt><dd>${escapeHtml(o.socio||'')}</dd><dt>Nombre</dt><dd>${escapeHtml(o.nombreSocio||'')}</dd><dt>Celular</dt><dd>${escapeHtml(o.celular||'')}</dd><dt>Responsable</dt><dd>${escapeHtml(o.responsable||'')}</dd><dt>Referencia</dt><dd>${escapeHtml(o.referencia||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia];if(field==='celular'){o.celular=cleanPhone(el.value);if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual')}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o)}else o[field]=el.value;saveDB();renderAll();toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatario||o.nombreSocio||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':displayDate(o.fechaEntrega),'DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion})),'PEDIDOS_SERVIENTREGA.xlsx'));
+// Cargas
+$('processNormal').addEventListener('click',()=>{const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const r=processNormalRows(rows);showResult('resNormal',`Creados: <b>${r.created}</b> · Actualizados: <b>${r.updated}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>`);$('txtNormal').value='';renderAll()});$('processServi').addEventListener('click',()=>{const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');const r=processServiRows(rows);showResult('resServi',`Actualizados: <b>${r.updated}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>`);$('txtServi').value='';renderAll()});$('processTc').addEventListener('click',()=>{const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');const r=processTcRows(rows);showResult('resTc',`Actualización global · Guías cruzadas: <b>${r.guideMatches}</b> · TC guardadas: <b>${r.stored}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>`);$('txtTc').value='';renderAll()});
+async function processFile(inputId,type,resultId){try{const rows=await rowsFromFile($(inputId));let r;if(type==='normal')r=processNormalRows(rows);if(type==='servi')r=processServiRows(rows);if(type==='tc')r=processTcRows(rows);showResult(resultId,type==='normal'?`Creados: <b>${r.created}</b> · Actualizados: <b>${r.updated}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>`:type==='servi'?`Actualizados: <b>${r.updated}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>`:`Actualización global · Guías cruzadas: <b>${r.guideMatches}</b> · TC guardadas: <b>${r.stored}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>`);renderAll()}catch(e){alert(e.message||e)}}
+$('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
+// INFOBIP
+['iMonth','iDate','iOwner','iChannel'].forEach(id=>$(id).addEventListener('change',renderInfo));$('selectInfo').addEventListener('click',()=>document.querySelectorAll('.info-check:not(:disabled)').forEach(x=>x.checked=true));$('copyInfo').addEventListener('click',async()=>{const ids=[...document.querySelectorAll('.info-check:checked')].map(x=>x.dataset.guia),lines=infoRows().filter(o=>ids.includes(o.guia)).map(o=>o._msg.line).filter(Boolean);if(!lines.length)return alert('Selecciona al menos una línea.');const text=lines.join('\n');try{await navigator.clipboard.writeText(text);toast(`${lines.length} líneas copiadas`)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast(`${lines.length} líneas copiadas`)}});$('exportInfo').addEventListener('click',()=>{const ids=[...document.querySelectorAll('.info-check:checked')].map(x=>x.dataset.guia),rows=infoRows().filter(o=>ids.includes(o.guia));if(!rows.length)return alert('Selecciona al menos una línea.');exportRows(rows.map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'SOCIO':o.socio,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS':o.status,'CELULAR DESTINO':o.celular,'TIPO MENSAJE':o._msg.type,'MENSAJE INFOBIP':o._msg.line})),'INFOBIP_SERVIENTREGA.xlsx')});
+// Dashboard
+$('dMonth').addEventListener('change',renderDashboard);$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};for(const o of rows)delete db.orders[o.guia];saveDB();renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
+// Config
+$('addOwner').addEventListener('click',()=>{const name=$('newOwnerName').value.trim(),phone=cleanPhone($('newOwnerPhone').value);if(!name)return;db.owners.push({name,phone,active:true});$('newOwnerName').value='';$('newOwnerPhone').value='';saveDB();renderAll()});$('ownersList').addEventListener('change',e=>{const el=e.target;if(el.dataset.ownerName!==undefined){const i=+el.dataset.ownerName,old=db.owners[i].name,newn=el.value.trim()||old;db.owners[i].name=newn;for(const z of db.zones)if(z.owner===old)z.owner=newn;for(const o of Object.values(db.orders))if(o.responsable===old)o.responsable=newn}if(el.dataset.ownerPhone!==undefined)db.owners[+el.dataset.ownerPhone].phone=cleanPhone(el.value);saveDB();renderAll()});$('ownersList').addEventListener('click',e=>{const rb=e.target.closest('[data-owner-replace]');if(rb){const i=+rb.dataset.ownerReplace,o=db.owners[i];const guides=Object.values(db.orders).filter(x=>x.responsable===o.name).length,zones=db.zones.filter(z=>z.owner===o.name).length;$('replaceOwnerIndex').value=i;$('replaceOwnerName').value='';$('replaceOwnerPhone').value='';$('replaceOwnerSummary').innerHTML=`<b>${escapeHtml(o.name)}</b> tiene <b>${guides}</b> pedidos abiertos y <b>${zones}</b> zonas asignadas. Todo pasará al nuevo responsable.`;$('replaceOwnerModal').style.display='flex';return}const b=e.target.closest('[data-owner-toggle]');if(!b)return;db.owners[+b.dataset.ownerToggle].active=!db.owners[+b.dataset.ownerToggle].active;saveDB();renderAll()});$('addClaim').addEventListener('click',()=>{const n=$('newClaim').value.trim();if(!n)return;db.claims.push({name:n,desc:''});$('newClaim').value='';saveDB();renderAll()});$('claimsList').addEventListener('change',e=>{const el=e.target;if(el.dataset.claimName!==undefined){const i=+el.dataset.claimName,old=db.claims[i].name,newn=el.value.trim()||old;db.claims[i].name=newn;for(const o of Object.values(db.orders))if(o.clasificacion===old)o.clasificacion=newn}if(el.dataset.claimDesc!==undefined)db.claims[+el.dataset.claimDesc].desc=el.value;saveDB();renderAll()});$('claimsList').addEventListener('click',e=>{const b=e.target.closest('[data-claim-del]');if(!b)return;db.claims.splice(+b.dataset.claimDel,1);saveDB();renderAll()});$('addZone').addEventListener('click',()=>{const zone=$('newZone').value.trim(),owner=$('newZoneOwner').value;if(!zone||!owner)return;const exist=db.zones.find(z=>N(z.zone)===N(zone));if(exist)exist.owner=owner;else db.zones.push({zone,owner});for(const o of Object.values(db.orders))o.responsable=assignOwner(o);$('newZone').value='';saveDB();renderAll()});$('zonesList').addEventListener('change',e=>{const el=e.target;if(el.dataset.zoneName!==undefined)db.zones[+el.dataset.zoneName].zone=el.value.trim();if(el.dataset.zoneOwner!==undefined)db.zones[+el.dataset.zoneOwner].owner=el.value;for(const o of Object.values(db.orders))o.responsable=assignOwner(o);saveDB();renderAll()});$('zonesList').addEventListener('click',e=>{const b=e.target.closest('[data-zone-del]');if(!b)return;db.zones.splice(+b.dataset.zoneDel,1);saveDB();renderAll()});$('contactSearch').addEventListener('input',renderContacts);$('addContact').addEventListener('click',()=>{const s=$('newSocio').value.trim(),p=cleanPhone($('newPhone').value);if(!s||!p)return;registerContact(s,p,'Manual');for(const o of Object.values(db.orders))if(o.socio===s){o.celular=p;rememberGuidePhone(o.guia,p,'Maestro de Contactos')}$('newSocio').value='';$('newPhone').value='';saveDB();renderAll()});$('contactsList').addEventListener('change',e=>{const s=e.target.dataset.contactPhone;if(!s)return;const p=cleanPhone(e.target.value);registerContact(s,p,'Manual');for(const o of Object.values(db.orders))if(o.socio===s){o.celular=p;rememberGuidePhone(o.guia,p,'Maestro de Contactos')}saveDB();renderAll()});
+
+$('confirmReplaceOwner').addEventListener('click',()=>{const i=+$('replaceOwnerIndex').value;if(!Number.isInteger(i)||!db.owners[i])return;const old=db.owners[i].name,newName=$('replaceOwnerName').value.trim(),newPhone=cleanPhone($('replaceOwnerPhone').value);if(!newName)return toast('Ingresa el nuevo responsable');const existingIndex=db.owners.findIndex((o,j)=>j!==i&&N(o.name)===N(newName));if(existingIndex>=0){const target=db.owners[existingIndex];if(newPhone)target.phone=newPhone;target.active=true;for(const z of db.zones)if(z.owner===old)z.owner=target.name;for(const o of Object.values(db.orders))if(o.responsable===old)o.responsable=target.name;db.owners.splice(i,1);if(activeOwner===old)activeOwner=target.name}else{db.owners[i].name=newName;db.owners[i].phone=newPhone||db.owners[i].phone;db.owners[i].active=true;for(const z of db.zones)if(z.owner===old)z.owner=newName;for(const o of Object.values(db.orders))if(o.responsable===old)o.responsable=newName;if(activeOwner===old)activeOwner=newName}$('replaceOwnerModal').style.display='none';saveDB();renderAll();toast(`${old} reemplazado por ${newName}`)});
+$('cancelReplaceOwner').addEventListener('click',()=>$('replaceOwnerModal').style.display='none');
+$('replaceOwnerModal').addEventListener('click',e=>{if(e.target===$('replaceOwnerModal'))$('replaceOwnerModal').style.display='none'});
+
+$('addHoliday').addEventListener('click',()=>{const date=$('holidayDate').value,days=Math.max(0,Number($('holidayDays').value||0));if(!date)return toast('Selecciona la fecha del feriado');db.settings=db.settings||{holidays:[],pupDays:1};const found=db.settings.holidays.find(h=>h.date===date);if(found)found.days=days;else db.settings.holidays.push({date,days});$('holidayDate').value='';$('holidayDays').value=1;saveDB();renderAll();toast('Feriado guardado')});
+$('holidaysList').addEventListener('click',e=>{const b=e.target.closest('[data-holiday-del]');if(!b)return;db.settings.holidays=db.settings.holidays.filter(h=>h.date!==b.dataset.holidayDel);saveDB();renderAll();toast('Feriado eliminado')});
+$('savePupRule').addEventListener('click',()=>{const days=Math.max(0,Number($('pupDaysConfig').value||0));db.settings=db.settings||{holidays:[],pupDays:1};db.settings.pupDays=days;saveDB();renderAll();toast(`Regla PUP guardada: +${days} día/s`)});
+
+// Respaldo
+$('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();renderAll();toast('Respaldo importado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;db.orders={};saveDB();renderAll();toast('Pedidos abiertos eliminados')});
+$('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none');$('socioModal').addEventListener('click',e=>{if(e.target===$('socioModal'))$('socioModal').style.display='none'});
+renderAll();
+initFirebase();
+</script>
+</body>
+</html>
