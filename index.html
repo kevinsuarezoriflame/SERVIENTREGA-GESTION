@@ -114,6 +114,14 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
 .summary-card.delivered .summary-icon{background:#DDF5E8;color:#008A43}
 .summary-card.pending .summary-icon{background:#E9EEEC;color:#5F7068}
 .summary-card.effectiveness .summary-icon{background:#FFF0C6;color:#A87300}
+.summary-action{border:0;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
+.summary-action:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(0,166,81,.16)}
+.summary-action svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.modal.daily-orders-modal{width:min(900px,94vw);padding:18px 20px}
+.daily-chart-wrap{position:relative;height:350px;margin-top:12px}
+.daily-chart-wrap canvas{width:100%!important;height:100%!important}
+.daily-chart-empty{height:300px;display:flex;align-items:center;justify-content:center;color:#718079;border:1px dashed #D7E4DE;border-radius:10px;background:#FBFDFC}
+
 .dashboard-topbar{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:10px}
 .dashboard-topbar .dashboard-month-actions{display:flex;align-items:end;gap:8px;margin-left:auto}
 .dashboard-topbar .field select{min-width:185px}
@@ -179,7 +187,9 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
           <div class="summary-value" id="sumTotal">0</div>
           <div class="summary-sub">base total</div>
         </div>
-        <div class="summary-icon">▣</div>
+        <button class="summary-icon summary-action" id="openDailyOrders" title="Ver pedidos cargados por día" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="m7 15 4-4 3 2 5-6"/></svg>
+        </button>
       </div>
       <div class="summary-card delivered">
         <div class="summary-copy">
@@ -375,6 +385,18 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
 
 <div class="modal-bg" id="socioModal"><div class="modal"><h3>Datos del socio</h3><dl id="socioBody"></dl><div class="modal-actions"><button class="btn btn-green" id="closeSocio">Cerrar</button></div></div></div>
 <div id="gestionFloatingTip" class="gestion-floating-tip"></div>
+<div class="modal-bg" id="dailyOrdersModal">
+  <div class="modal daily-orders-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <h3 style="margin:0">Pedidos cargados por día · FECHA GUIA</h3>
+        <div id="dailyOrdersSubtitle" style="font-size:11px;color:#697772;margin-top:4px"></div>
+      </div>
+      <button class="btn" id="closeDailyOrders" type="button">×</button>
+    </div>
+    <div class="daily-chart-wrap" id="dailyOrdersChartWrap"><canvas id="dailyOrdersChart"></canvas></div>
+  </div>
+</div>
 <div class="modal-bg" id="gestionModal">
   <div class="modal">
     <h3>Gestión del pedido</h3>
@@ -405,10 +427,10 @@ const DEFAULT_ZONES=[{"zone": "AZUAY", "owner": "Alba"}, {"zone": "CUENCA", "own
 const DEFAULT_CLAIMS=[{"name": "FUERA DE COBERTURA", "desc": "No llega el camión al sector"}, {"name": "CAMBIO DE DIRECCIÓN", "desc": "Cliente o socio solicita cambio de domicilio"}, {"name": "NUMERO EQUIVOCADO", "desc": "Número de celular equivocado"}, {"name": "CAMBIO A PUP", "desc": "Cliente no está en domicilio y solicita retiro de oficina"}, {"name": "ZONA PELIGROSA", "desc": "La zona es de alto riesgo y el camión no puede ingresar"}, {"name": "DEVOLUCION DE OFICINA", "desc": "El cliente no retiró su pedido en la oficina dentro del plazo"}, {"name": "DEVOLUCION AL REMITENTE", "desc": "Devolución por solicitud de Oriflame o por intentos de entrega"}, {"name": "DEVOLUCION CLIENTE NO DESEA", "desc": "Cliente no desea o no ha realizado pedido"}, {"name": "DEVOLUCION CLIENTE NO RETIRA", "desc": "Cliente no se ha acercado a retirar su pedido"}, {"name": "DIRECCION INCORRECTA", "desc": "Dirección proporcionada en la guía está incorrecta"}, {"name": "DATOS INCOMPLETOS", "desc": "Información de la guía insuficiente"}, {"name": "CIERRE DE VIAS", "desc": "Calles afectadas"}, {"name": "TRAYECTO ESPECIAL", "desc": "Cobertura uno o dos días por semana"}, {"name": "NO HAY QUIEN RECIBA", "desc": "No hay quien reciba en el domicilio"}, {"name": "NO CONTESTA", "desc": "No contesta para coordinar entrega"}, {"name": "SINIESTRO", "desc": "Siniestro de carga"}, {"name": "CELULAR INCORRECTO", "desc": "No registra WhatsApp o está equivocado"}, {"name": "NOVEDAD COURIER", "desc": "Novedad atribuible a Servientrega"}, {"name": "Cierre de vías2", "desc": "Deslizamientos de tierra"}, {"name": "BLOQUEO DE VÍAS", "desc": "Bloqueo por manifestación"}];
 const CANTON_PROV={"CUENCA": "AZUAY", "GIRON": "AZUAY", "GUALACEO": "AZUAY", "NABON": "AZUAY", "PAUTE": "AZUAY", "PUCARA": "AZUAY", "SAN FERNANDO": "AZUAY", "SANTA ISABEL": "AZUAY", "SIGSIG": "AZUAY", "ONA": "AZUAY", "CHORDELEG": "AZUAY", "EL PAN": "AZUAY", "SEVILLA DE ORO": "AZUAY", "GUACHAPALA": "AZUAY", "CAMILO PONCE ENRIQUEZ": "AZUAY", "GUARANDA": "BOLIVAR", "CHILLANES": "BOLIVAR", "CHIMBO": "BOLIVAR", "ECHEANDIA": "BOLIVAR", "SAN MIGUEL": "BOLIVAR", "CALUMA": "BOLIVAR", "LAS NAVES": "BOLIVAR", "AZOGUES": "CANAR", "BIBLIAN": "CANAR", "CANAR": "CANAR", "LA TRONCAL": "CANAR", "EL TAMBO": "CANAR", "DELEG": "CANAR", "SUSCAL": "CANAR", "TULCAN": "CARCHI", "BOLIVAR": "MANABI", "ESPEJO": "CARCHI", "MIRA": "CARCHI", "MONTUFAR": "CARCHI", "SAN PEDRO DE HUACA": "CARCHI", "LATACUNGA": "COTOPAXI", "LA MANA": "COTOPAXI", "PANGUA": "COTOPAXI", "PUJILI": "COTOPAXI", "SALCEDO": "COTOPAXI", "SAQUISILI": "COTOPAXI", "SIGCHOS": "COTOPAXI", "RIOBAMBA": "CHIMBORAZO", "ALAUSI": "CHIMBORAZO", "COLTA": "CHIMBORAZO", "CHAMBO": "CHIMBORAZO", "GUAMOTE": "CHIMBORAZO", "GUANO": "CHIMBORAZO", "PALLATANGA": "CHIMBORAZO", "PENIPE": "CHIMBORAZO", "CUMANDA": "CHIMBORAZO", "MACHALA": "EL ORO", "ARENILLAS": "EL ORO", "ATAHUALPA": "EL ORO", "BALSAS": "EL ORO", "CHILLA": "EL ORO", "EL GUABO": "EL ORO", "HUAQUILLAS": "EL ORO", "MARCABELI": "EL ORO", "PASAJE": "EL ORO", "PINAS": "EL ORO", "PORTOVELO": "EL ORO", "SANTA ROSA": "EL ORO", "ZARUMA": "EL ORO", "LAS LAJAS": "EL ORO", "ESMERALDAS": "ESMERALDAS", "ELOY ALFARO": "ESMERALDAS", "MUISNE": "ESMERALDAS", "QUININDE": "ESMERALDAS", "SAN LORENZO": "ESMERALDAS", "ATACAMES": "ESMERALDAS", "RIOVERDE": "ESMERALDAS", "GUAYAQUIL": "GUAYAS", "ALFREDO BAQUERIZO MORENO": "GUAYAS", "BALAO": "GUAYAS", "BALZAR": "GUAYAS", "COLIMES": "GUAYAS", "DAULE": "GUAYAS", "DURAN": "GUAYAS", "EL EMPALME": "GUAYAS", "ISIDRO AYORA": "GUAYAS", "LOMAS DE SARGENTILLO": "GUAYAS", "MILAGRO": "GUAYAS", "NARANJAL": "GUAYAS", "NARANJITO": "GUAYAS", "PALESTINA": "GUAYAS", "PEDRO CARBO": "GUAYAS", "PLAYAS": "GUAYAS", "SAMBORONDON": "GUAYAS", "SANTA LUCIA": "GUAYAS", "SALITRE": "GUAYAS", "SIMON BOLIVAR": "GUAYAS", "YAGUACHI": "GUAYAS", "POSORJA": "GUAYAS", "IBARRA": "IMBABURA", "ANTONIO ANTE": "IMBABURA", "COTACACHI": "IMBABURA", "OTAVALO": "IMBABURA", "PIMAMPIRO": "IMBABURA", "SAN MIGUEL DE URCUQUI": "IMBABURA", "LOJA": "LOJA", "CALVAS": "LOJA", "CATAMAYO": "LOJA", "CELICA": "LOJA", "ESPINDOLA": "LOJA", "GONZANAMA": "LOJA", "MACARA": "LOJA", "OLMEDO": "MANABI", "PALTAS": "LOJA", "PUYANGO": "LOJA", "QUILANGA": "LOJA", "SARAGURO": "LOJA", "SOZORANGA": "LOJA", "ZAPOTILLO": "LOJA", "BABAHOYO": "LOS RIOS", "BABA": "LOS RIOS", "BUENA FE": "LOS RIOS", "MONTALVO": "LOS RIOS", "PUEBLOVIEJO": "LOS RIOS", "QUEVEDO": "LOS RIOS", "URDANETA": "LOS RIOS", "VENTANAS": "LOS RIOS", "VINCES": "LOS RIOS", "PALENQUE": "LOS RIOS", "QUINSALOMA": "LOS RIOS", "VALENCIA": "LOS RIOS", "PORTOVIEJO": "MANABI", "CHONE": "MANABI", "EL CARMEN": "MANABI", "FLAVIO ALFARO": "MANABI", "JIPIJAPA": "MANABI", "JUNIN": "MANABI", "MANTA": "MANABI", "MONTECRISTI": "MANABI", "PAJAN": "MANABI", "PICHINCHA": "MANABI", "ROCAFUERTE": "MANABI", "SANTA ANA": "MANABI", "SUCRE": "MANABI", "TOSAGUA": "MANABI", "24 DE MAYO": "MANABI", "PEDERNALES": "MANABI", "PUERTO LOPEZ": "MANABI", "JAMA": "MANABI", "JARAMIJO": "MANABI", "SAN VICENTE": "MANABI", "MORONA": "MORONA SANTIAGO", "GUALAQUIZA": "MORONA SANTIAGO", "LIMON INDANZA": "MORONA SANTIAGO", "PALORA": "MORONA SANTIAGO", "SANTIAGO": "MORONA SANTIAGO", "SUCUA": "MORONA SANTIAGO", "HUAMBOYA": "MORONA SANTIAGO", "SAN JUAN BOSCO": "MORONA SANTIAGO", "TAISHA": "MORONA SANTIAGO", "LOGRONO": "MORONA SANTIAGO", "PABLO SEXTO": "MORONA SANTIAGO", "TIWINTZA": "MORONA SANTIAGO", "TENA": "NAPO", "ARCHIDONA": "NAPO", "EL CHACO": "NAPO", "QUIJOS": "NAPO", "CARLOS JULIO AROSEMENA TOLA": "NAPO", "ORELLANA": "ORELLANA", "AGUARICO": "ORELLANA", "LA JOYA DE LOS SACHAS": "ORELLANA", "LORETO": "ORELLANA", "PASTAZA": "PASTAZA", "MERA": "PASTAZA", "SANTA CLARA": "PASTAZA", "ARAJUNO": "PASTAZA", "QUITO": "PICHINCHA", "CAYAMBE": "PICHINCHA", "MEJIA": "PICHINCHA", "PEDRO MONCAYO": "PICHINCHA", "RUMINAHUI": "PICHINCHA", "PEDRO VICENTE MALDONADO": "PICHINCHA", "PUERTO QUITO": "PICHINCHA", "SAN MIGUEL DE LOS BANCOS": "PICHINCHA", "SANTO DOMINGO": "SANTO DOMINGO", "SANTO DOMINGO DE LOS TSACHILAS": "SANTO DOMINGO", "SANTA ELENA": "SANTA ELENA", "LA LIBERTAD": "SANTA ELENA", "SALINAS": "SANTA ELENA", "LAGO AGRIO": "SUCUMBIOS", "GONZALO PIZARRO": "SUCUMBIOS", "PUTUMAYO": "SUCUMBIOS", "SHUSHUFINDI": "SUCUMBIOS", "SUCUMBIOS": "SUCUMBIOS", "CASCALES": "SUCUMBIOS", "CUYABENO": "SUCUMBIOS", "AMBATO": "TUNGURAHUA", "BANOS DE AGUA SANTA": "TUNGURAHUA", "CEVALLOS": "TUNGURAHUA", "MOCHA": "TUNGURAHUA", "PATATE": "TUNGURAHUA", "QUERO": "TUNGURAHUA", "SAN PEDRO DE PELILEO": "TUNGURAHUA", "SANTIAGO DE PILLARO": "TUNGURAHUA", "TISALEO": "TUNGURAHUA", "ZAMORA": "ZAMORA CHINCHIPE", "CHINCHIPE": "ZAMORA CHINCHIPE", "NANGARITZA": "ZAMORA CHINCHIPE", "YACUAMBI": "ZAMORA CHINCHIPE", "YANTZAZA": "ZAMORA CHINCHIPE", "EL PANGUI": "ZAMORA CHINCHIPE", "CENTINELA DEL CONDOR": "ZAMORA CHINCHIPE", "PALANDA": "ZAMORA CHINCHIPE", "PAQUISHA": "ZAMORA CHINCHIPE"};
 const PROVINCIAS=["AZUAY", "BOLIVAR", "CANAR", "CARCHI", "COTOPAXI", "CHIMBORAZO", "EL ORO", "ESMERALDAS", "GALAPAGOS", "GUAYAS", "IMBABURA", "LOJA", "LOS RIOS", "MANABI", "MORONA SANTIAGO", "NAPO", "ORELLANA", "PASTAZA", "PICHINCHA", "SANTA ELENA", "SANTO DOMINGO", "SUCUMBIOS", "TUNGURAHUA", "ZAMORA CHINCHIPE"];
-function freshDB(){return{version:7,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
-function normalizeDB(x){x=x||freshDB();x.version=7;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
+function freshDB(){return{version:8,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
+function normalizeDB(x){x=x||freshDB();x.version=8;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
-let db=loadDB(),activeOwner='TODOS',pendingFirst=false,workingGuide='',chartTiempo=null,chartClaims=null;
+let db=loadDB(),activeOwner='TODOS',pendingFirst=false,workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
 const $=id=>document.getElementById(id);
 
 const FIREBASE_CONFIG={
@@ -450,7 +472,7 @@ function scheduleCloudSync(){
   setCloudStatus('Firebase: guardando...','saving');
   cloudSyncTimer=setTimeout(syncDBToCloud,220);
 }
-function configPayload(){return cleanCloudValue({version:7,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
+function configPayload(){return cleanCloudValue({version:8,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
 function mapPayload(group,key,val){
   const out=cleanCloudValue(val);
   if(group==='orders'&&!out.guia)out.guia=key;
@@ -658,7 +680,7 @@ function infoMessage(o){const resp=ownerPhone(o.responsable);if(!o.socio)return{
 function infoRows(){const m=$('iMonth').value,d=$('iDate').value,own=$('iOwner').value,c=$('iChannel').value;return Object.values(db.orders).filter(o=>!isDelivered(o)&&['PUP','HD'].includes(o.canal)&&(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!own||o.responsable===own)&&(!c||o.canal===c)).map(o=>({...o,_msg:infoMessage(o)}))}
 function infoTableHtml(rows){return `<thead><tr><th>✓</th><th>GUIA</th><th>FECHA GUIA</th><th>SOCIO</th><th>CANAL</th><th>RESPONSABLE</th><th>STATUS</th><th>CELULAR</th><th>LÍNEA INFOBIP</th></tr></thead><tbody>${rows.map(o=>`<tr><td><input type="checkbox" class="info-check" data-guia="${o.guia}" ${o._msg.ready?'':'disabled'}></td><td>${escapeHtml(o.guia)}</td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.socio||'')}</td><td>${escapeHtml(o.canal)}</td><td>${escapeHtml(o.responsable||'')}</td><td><span class="badge ${statusBadge(o)}">${escapeHtml(o.status||'Pendiente')}</span></td><td>${escapeHtml(o.celular||'')}</td><td>${escapeHtml(o._msg.line||'')}</td></tr>`).join('')}</tbody>`}
 function renderInfo(){const rows=infoRows(),agency=rows.filter(o=>o._msg.type==='Retiro agencia'),general=rows.filter(o=>o._msg.type!=='Retiro agencia');$('iPending').textContent=rows.length;$('iReady').textContent=rows.filter(o=>o._msg.ready).length;$('iPickup').textContent=agency.filter(o=>o._msg.ready).length;$('iGeneral').textContent=general.filter(o=>o._msg.ready).length;$('iMissing').textContent=rows.filter(o=>!o._msg.ready).length;$('infoAgencyTable').innerHTML=agency.length?infoTableHtml(agency):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>';$('infoGeneralTable').innerHTML=general.length?infoTableHtml(general):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>'}
-function computeAgg(rows){const porProvincia={},porTiempo={},porClaim={},porCanal={HD:0,PUP:0,SPO:0};let total=rows.length,entregados=0;for(const o of rows){const prov=canonProv(o.provincia||o.ciudad);porProvincia[prov]=(porProvincia[prov]||0)+1;const t=deliveryTime(o);if(t)porTiempo[t]=(porTiempo[t]||0)+1;if(o.clasificacion)porClaim[o.clasificacion]=(porClaim[o.clasificacion]||0)+1;if(Object.prototype.hasOwnProperty.call(porCanal,o.canal))porCanal[o.canal]++;const noPorTiempo=N(t).includes('NO ENTREGADO')||t==='No entregado';const noServi=N(o.clasificacion).includes('NOVEDAD COURIER');if(!(noPorTiempo||noServi))entregados++}const okTiempo=(porTiempo['24hrs']||0)+(porTiempo['48hrs']||0)+(porTiempo['Menos de 24hrs']||0);const noTiempo=(porTiempo['72hrs']||0)+(porTiempo['Más de 72hrs']||0)+(porTiempo['No entregado']||porTiempo['NO ENTREGADO']||0);const totTiempo=okTiempo+noTiempo;const entregadosReales=rows.filter(o=>isDelivered(o)).length;return{porProvincia,porTiempo,porClaim,porCanal,total,entregados,entregadosReales,efectividad:total?entregados*100/total:null,efectividadTiempo:totTiempo?okTiempo*100/totTiempo:null}}
+function computeAgg(rows){const porProvincia={},porTiempo={},porClaim={},porCanal={HD:0,PUP:0,SPO:0},porFechaGuia={};let total=rows.length,entregados=0;for(const o of rows){const fg=isoDate(o.fechaGuia);if(fg)porFechaGuia[fg]=(porFechaGuia[fg]||0)+1;const prov=canonProv(o.provincia||o.ciudad);porProvincia[prov]=(porProvincia[prov]||0)+1;const t=deliveryTime(o);if(t)porTiempo[t]=(porTiempo[t]||0)+1;if(o.clasificacion)porClaim[o.clasificacion]=(porClaim[o.clasificacion]||0)+1;if(Object.prototype.hasOwnProperty.call(porCanal,o.canal))porCanal[o.canal]++;const noPorTiempo=N(t).includes('NO ENTREGADO')||t==='No entregado';const noServi=N(o.clasificacion).includes('NOVEDAD COURIER');if(!(noPorTiempo||noServi))entregados++}const okTiempo=(porTiempo['24hrs']||0)+(porTiempo['48hrs']||0)+(porTiempo['Menos de 24hrs']||0);const noTiempo=(porTiempo['72hrs']||0)+(porTiempo['Más de 72hrs']||0)+(porTiempo['No entregado']||porTiempo['NO ENTREGADO']||0);const totTiempo=okTiempo+noTiempo;const entregadosReales=rows.filter(o=>isDelivered(o)).length;return{porProvincia,porTiempo,porClaim,porCanal,porFechaGuia,total,entregados,entregadosReales,efectividad:total?entregados*100/total:null,efectividadTiempo:totTiempo?okTiempo*100/totTiempo:null}}
 function dashboardData(){const m=$('dMonth').value;if(!m)return computeAgg([]);if(db.snapshots[m])return db.snapshots[m].agg;return computeAgg(Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m))}
 const DASH_PALETTE=['#00A651','#63C995','#4D8DCC','#F0B44D','#846FC7','#4FA9A3','#7E8F88','#9AA7A1'];
 function timeChartColor(label){const s=N(label);if(s.includes('NO ENTREGADO'))return'#7E8F88';if(s.includes('MENOS DE 24')||s.includes('<24'))return'#00A651';if(s.includes('24H'))return'#63C995';if(s.includes('48H'))return'#4D8DCC';if(s.includes('72H')&&!s.includes('MAS'))return'#F0B44D';if(s.includes('MAS DE 72')||s.includes('>72'))return'#C85F66';return'#6FAFA3'}
@@ -674,7 +696,68 @@ try{if(syncChannel)syncChannel.onmessage=e=>{if(e.data?.type==='db-updated'&&!fi
 
 function exportRows(rows,name){if(!window.XLSX)return alert('No se cargó el módulo Excel.');const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'DATA');XLSX.writeFile(wb,name)}
 function downloadPNG(id){const c=$(id),a=document.createElement('a');a.download=id+'.png';a.href=c.toDataURL('image/png');a.click()}
+
+function dailyOrdersData(){
+  const m=$('dMonth').value;
+  if(!m)return{month:m,counts:{}};
+  if(db.snapshots[m])return{month:m,counts:db.snapshots[m].agg?.porFechaGuia||{}};
+  const counts={};
+  for(const o of Object.values(db.orders)){
+    if(monthKey(o.fechaGuia)!==m)continue;
+    const d=isoDate(o.fechaGuia);
+    if(d)counts[d]=(counts[d]||0)+1;
+  }
+  return{month:m,counts};
+}
+function renderDailyOrdersChart(){
+  const {month,counts}=dailyOrdersData(),wrap=$('dailyOrdersChartWrap');
+  $('dailyOrdersSubtitle').textContent=monthName(month);
+  const arr=Object.entries(counts).map(([d,v])=>({d,v})).sort((a,b)=>a.d.localeCompare(b.d));
+  if(chartDailyOrders){chartDailyOrders.destroy();chartDailyOrders=null}
+  if(!arr.length){
+    wrap.innerHTML='<div class="daily-chart-empty">No hay detalle diario disponible para este mes.</div>';
+    return;
+  }
+  wrap.innerHTML='<canvas id="dailyOrdersChart"></canvas>';
+  chartDailyOrders=new Chart($('dailyOrdersChart').getContext('2d'),{
+    type:'line',
+    data:{
+      labels:arr.map(x=>{const p=x.d.split('-');return`${p[2]}/${p[1]}`}),
+      datasets:[{
+        data:arr.map(x=>x.v),
+        borderColor:'#00A651',
+        backgroundColor:'rgba(0,166,81,.10)',
+        pointBackgroundColor:'#00A651',
+        pointBorderColor:'#00A651',
+        pointRadius:4,
+        pointHoverRadius:6,
+        borderWidth:2.5,
+        tension:.25,
+        fill:false
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      layout:{padding:{top:18,right:18,left:6,bottom:4}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{title:items=>`Fecha: ${items[0].label}`,label:ctx=>`Pedidos: ${ctx.raw}`}},
+        datalabels:{display:true,align:'top',anchor:'end',color:'#1D2A24',font:{weight:'bold',size:10},formatter:v=>v}
+      },
+      scales:{
+        x:{grid:{color:'rgba(120,130,125,.15)'},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:18}},
+        y:{beginAtZero:true,grace:'10%',ticks:{precision:0},grid:{color:'rgba(120,130,125,.18)'}}
+      }
+    }
+  });
+}
+
 Chart.register(ChartDataLabels);
+$('openDailyOrders').addEventListener('click',()=>{$('dailyOrdersModal').style.display='flex';requestAnimationFrame(renderDailyOrdersChart)});
+$('closeDailyOrders').addEventListener('click',()=>{$('dailyOrdersModal').style.display='none'});
+$('dailyOrdersModal').addEventListener('click',e=>{if(e.target===$('dailyOrdersModal'))$('dailyOrdersModal').style.display='none'});
+
 const SIDEBAR_STATE_KEY='servientrega_sidebar_collapsed';
 function setSidebarCollapsed(collapsed){
   const root=$('appRoot'),btn=$('sidebarToggle');
