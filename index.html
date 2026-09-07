@@ -163,7 +163,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom">Gestión Servientrega · Oriflame<br><span class="live-dot"></span><span id="cloudStatus">Firebase: conectando...</span><br><span id="buildStatus" style="opacity:.75">v35 · PERFORMANCE</span></div>
+  <div class="sidebar-bottom">Gestión Servientrega · Oriflame<br><span class="live-dot"></span><span id="cloudStatus">Firebase: conectando...</span><br><span id="buildStatus" style="opacity:.75">v36 · LIVE GUARANTEE</span></div>
 </aside>
 
 <main class="main">
@@ -466,8 +466,8 @@ const LOCALIDAD_PROV={
   "SAN ISIDRO (BAHIA)":"MANABI",
   "BAHIA DE CARAQUEZ":"MANABI"
 };
-function freshDB(){return{version:23,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
-function normalizeDB(x){x=x||freshDB();x.version=23;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
+function freshDB(){return{version:24,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
+function normalizeDB(x){x=x||freshDB();x.version=24;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
 let db=loadDB(),activeOwner='TODOS',daysSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
 const $=id=>document.getElementById(id);
@@ -480,7 +480,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v35.20260907.1';
+const APP_BUILD='v36.20260907.1';
 const FB={
   config:'servientrega_configuracion',
   orders:'servientrega_pedidos',
@@ -497,7 +497,7 @@ const remotePulse={};
 let remotePulseTimer=null;
 
 let syncChannel=null,fsDB=null,firebaseReady=false,cloudApplying=false,cloudSyncTimer=null,cloudSyncRunning=false;
-let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0,lastOrderListenerAt=0,cloudStatusTimer=null,remoteBulkRenderTimer=null,serviBulkSeq=0,localCacheTimer=null,localCacheIdle=null,localCachePending=false,orderSearchTimer=null;
+let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0,lastOrderListenerAt=0,cloudStatusTimer=null,remoteBulkRenderTimer=null,serviBulkSeq=0,localCacheTimer=null,localCacheIdle=null,localCachePending=false,orderSearchTimer=null,lastBulkId='',bulkVerifyRunning=false;
 let cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
 try{if('BroadcastChannel'in window)syncChannel=new BroadcastChannel(SYNC_CHANNEL_NAME)}catch(e){}
 
@@ -535,6 +535,81 @@ async function publishSyncSignal(kind,guide='',count=1,orderSyncAt=0){
       nonce,at:Date.now(),orderSyncAt:Number(orderSyncAt||0),build:APP_BUILD
     },{merge:false});
   }catch(err){console.error('Sync signal write',err)}
+}
+async function publishServiBulkSignal(guides=[]){
+  if(!firebaseReady||!fsDB)return;
+  const clean=[...new Set((guides||[]).map(x=>String(x||'').trim()).filter(Boolean))];
+  const nonce=CLIENT_ID+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  const bulkId='bulk_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7);
+  lastSyncNonce=nonce;
+  try{
+    await fsDB.collection(FB.sync).doc('state').set({
+      kind:'servi-bulk',
+      guides:clean,
+      count:clean.length,
+      client:CLIENT_ID,
+      nonce,
+      bulkId,
+      at:Date.now(),
+      build:APP_BUILD
+    },{merge:false});
+  }catch(err){console.error('Servientrega bulk signal',err)}
+}
+async function syncBulkGuidesFromServer(guides=[]){
+  if(!firebaseReady||!fsDB||bulkVerifyRunning)return;
+  const clean=[...new Set((guides||[]).map(x=>String(x||'').trim()).filter(Boolean))];
+  if(!clean.length)return;
+
+  bulkVerifyRunning=true;
+  try{
+    const ids=clean.map(safeDocId);
+    const chunks=[];
+    for(let i=0;i<ids.length;i+=10)chunks.push(ids.slice(i,i+10));
+
+    const fresh={};
+    // Consultas dirigidas de 10 documentos; máximo 5 grupos simultáneos.
+    for(let i=0;i<chunks.length;i+=5){
+      const group=chunks.slice(i,i+5);
+      const snaps=await Promise.all(group.map(chunk=>
+        fsDB.collection(FB.orders)
+          .where(firebase.firestore.FieldPath.documentId(),'in',chunk)
+          .get({source:'server'})
+      ));
+      for(const snap of snaps){
+        snap.forEach(doc=>{
+          const d=doc.data()||{};
+          const key=String(d.guia||decodeURIComponent(doc.id));
+          fresh[key]=d;
+        });
+      }
+    }
+
+    let changed=false;
+    for(const guia of clean){
+      const d=fresh[guia];
+      if(!d)continue;
+      if(changedFields(db.orders[guia]||{},d).length)changed=true;
+      db.orders[guia]=d;
+      cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,d));
+    }
+
+    localCache();
+
+    // Una sola actualización visual silenciosa.
+    // Aunque onSnapshot haya llegado antes, esto deja la PC 100% alineada con Firestore.
+    const p=activePageId();
+    if(p==='pedidos')renderOrders();
+    else if(p==='dashboard')renderDashboard();
+    else if(p==='infobip')renderInfo();
+
+    setCloudStatus('Firebase: EN VIVO');
+  }catch(err){
+    console.error('Bulk server verification',err);
+    // Si la consulta dirigida falla, hacemos una lectura completa como último respaldo.
+    try{await refreshOrdersFromServer()}catch(e){}
+  }finally{
+    bulkVerifyRunning=false;
+  }
 }
 function activePageId(){return document.querySelector('.page.active')?.id||'pedidos'}
 function changedFields(a,b){
@@ -635,10 +710,16 @@ function processSyncSignal(signal){
       const current=Number(db.orders[guide]?._syncAt||0);
       if(!wanted||current<wanted)fetchOrderFromServer(guide);
     },650);
-  }else if(signal.kind==='bulk'||signal.kind==='servi-bulk'){
-    // Los documentos ya fueron aplicados EN VIVO por onSnapshot.
-    // La señal final no vuelve a reconstruir la pantalla.
-    setCloudStatus('Firebase: EN VIVO');
+  }else if(signal.kind==='servi-bulk'){
+    const bulkId=String(signal.bulkId||signal.nonce||'');
+    if(bulkId&&bulkId===lastBulkId)return;
+    lastBulkId=bulkId;
+    // Garantía silenciosa: onSnapshot es la vía rápida;
+    // esta verificación asegura que ninguna guía del barrido quede vieja.
+    syncBulkGuidesFromServer(signal.guides||[]);
+  }else if(signal.kind==='bulk'){
+    // Respaldo genérico para otras cargas masivas.
+    refreshOrdersFromServer();
   }
 }
 async function checkSyncStateFromServer(){
@@ -715,7 +796,7 @@ function scheduleCloudSync(){
   setCloudStatus('Firebase: guardando...','saving');
   cloudSyncTimer=setTimeout(syncDBToCloud,220);
 }
-function configPayload(){return cleanCloudValue({version:23,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
+function configPayload(){return cleanCloudValue({version:24,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
 function mapPayload(group,key,val){
   const out=cleanCloudValue(val);
   if(group==='orders'&&!out.guia)out.guia=key;
@@ -1061,8 +1142,9 @@ async function syncServiBulkNow(result){
       if(o)cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,o));
     }
 
-    // Señal final del barrido; no bloquea visualmente a otras PCs.
-    publishSyncSignal('servi-bulk','',changed.length,Date.now());
+    // Señal final con la lista exacta de guías.
+    // Las otras PCs la usan solo como garantía silenciosa.
+    publishServiBulkSignal(changed);
 
     // PRIORIDAD 2: memoria de la fuente Servientrega.
     // Esto va después porque no hace falta para que Pedidos/Dashboard/INFOBIP se vean en vivo.
@@ -1311,7 +1393,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v35 · PERFORMANCE';
+      const bs=$('buildStatus');if(bs)bs.textContent='v36 · LIVE GUARANTEE';
     }
   }catch(e){
     console.warn('Build check',e);
