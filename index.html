@@ -163,7 +163,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom">Gestión Servientrega · Oriflame<br><span class="live-dot"></span><span id="cloudStatus">Firebase: conectando...</span></div>
+  <div class="sidebar-bottom">Gestión Servientrega · Oriflame<br><span class="live-dot"></span><span id="cloudStatus">Firebase: conectando...</span><br><span id="buildStatus" style="opacity:.75">v28</span></div>
 </aside>
 
 <main class="main">
@@ -466,8 +466,8 @@ const LOCALIDAD_PROV={
   "SAN ISIDRO (BAHIA)":"MANABI",
   "BAHIA DE CARAQUEZ":"MANABI"
 };
-function freshDB(){return{version:15,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
-function normalizeDB(x){x=x||freshDB();x.version=15;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
+function freshDB(){return{version:16,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
+function normalizeDB(x){x=x||freshDB();x.version=16;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
 let db=loadDB(),activeOwner='TODOS',daysSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
 const $=id=>document.getElementById(id);
@@ -480,6 +480,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
+const APP_BUILD='v28.20260907.1';
 const FB={
   config:'servientrega_configuracion',
   orders:'servientrega_pedidos',
@@ -487,7 +488,8 @@ const FB={
   tc:'servientrega_fuentes_tc',
   servi:'servientrega_fuentes_servientrega',
   guidePhones:'servientrega_guia_contactos',
-  snapshots:'servientrega_cierres'
+  snapshots:'servientrega_cierres',
+  sync:'servientrega_sync'
 };
 const SYNC_CHANNEL_NAME='servientrega_oriflame_global_sync_v2';
 const CLIENT_ID=(()=>{try{let id=sessionStorage.getItem('servientrega_client_id');if(!id){id='c_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);sessionStorage.setItem('servientrega_client_id',id)}return id}catch(e){return 'c_'+Math.random().toString(36).slice(2)}})();
@@ -495,11 +497,82 @@ const remotePulse={};
 let remotePulseTimer=null;
 
 let syncChannel=null,fsDB=null,firebaseReady=false,cloudApplying=false,cloudSyncTimer=null,cloudSyncRunning=false;
+let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0;
 let cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
 try{if('BroadcastChannel'in window)syncChannel=new BroadcastChannel(SYNC_CHANNEL_NAME)}catch(e){}
 
 function setCloudStatus(text,state=''){const el=$('cloudStatus');if(!el)return;el.textContent=text;el.style.color=state==='error'?'#ffd5d5':state==='saving'?'#fff2b2':'#fff'}
 function localCache(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(db))}catch(e){}}
+
+async function publishSyncSignal(kind,guide='',count=1){
+  if(!firebaseReady||!fsDB)return;
+  const nonce=CLIENT_ID+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  lastSyncNonce=nonce;
+  try{
+    await fsDB.collection(FB.sync).doc('state').set({
+      kind,guide:String(guide||''),count:Number(count||0),client:CLIENT_ID,
+      nonce,at:Date.now(),build:APP_BUILD
+    },{merge:false});
+  }catch(err){console.error('Sync signal write',err)}
+}
+function applyServerOrder(guia,d){
+  if(!d)return;
+  db.orders[guia]=d;
+  cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,d));
+  markRemotePulse(guia);
+  localCache();
+  renderAll();
+}
+async function fetchOrderFromServer(guia){
+  if(!firebaseReady||!guia)return;
+  try{
+    const ref=fsDB.collection(FB.orders).doc(safeDocId(guia));
+    const doc=await ref.get({source:'server'});
+    if(doc.exists){
+      applyServerOrder(guia,doc.data()||{});
+      setCloudStatus('Firebase: cambio confirmado · '+liveTime());
+    }else if(db.orders[guia]){
+      delete db.orders[guia];
+      delete cloudFP.orders[guia];
+      localCache();renderAll();
+    }
+  }catch(err){console.error('Fetch order server',err)}
+}
+async function refreshOrdersFromServer(){
+  if(!firebaseReady)return;
+  try{
+    setCloudStatus('Firebase: actualizando...','saving');
+    const snap=await fsDB.collection(FB.orders).get({source:'server'});
+    const fresh={};
+    snap.forEach(doc=>{
+      const d=doc.data()||{},key=String(d.guia||decodeURIComponent(doc.id));
+      fresh[key]=d;
+    });
+    db.orders=fresh;
+    cloudFP.orders={};
+    for(const [key,d] of Object.entries(fresh))cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+    localCache();renderAll();
+    setCloudStatus('Firebase: EN VIVO · '+liveTime());
+  }catch(err){console.error('Refresh orders server',err);setCloudStatus('Firebase: error de lectura','error')}
+}
+async function processSyncSignal(signal){
+  if(!signal||signal.client===CLIENT_ID||!signal.nonce||signal.nonce===lastSyncNonce)return;
+  lastSyncNonce=signal.nonce;
+  if(signal.kind==='order'&&signal.guide){
+    await fetchOrderFromServer(String(signal.guide));
+  }else if(signal.kind==='bulk'){
+    await refreshOrdersFromServer();
+  }
+}
+async function checkSyncStateFromServer(){
+  if(!firebaseReady||Date.now()-lastServerSyncCheck<2500)return;
+  lastServerSyncCheck=Date.now();
+  try{
+    const doc=await fsDB.collection(FB.sync).doc('state').get({source:'server'});
+    if(doc.exists)await processSyncSignal(doc.data()||{});
+  }catch(err){console.error('Sync state check',err)}
+}
+
 
 function liveTime(){return new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
 function markRemotePulse(guia){
@@ -521,8 +594,8 @@ async function updateOrderLive(guia,patch,{render='all'}={}){
     setCloudStatus('Firebase: guardando...','saving');
     const ref=fsDB.collection(FB.orders).doc(safeDocId(guia));
     await ref.set(cleanCloudValue({...patch,...meta}),{merge:true});
-    // Avoid the general diff writer rewriting the same order immediately.
     cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,o));
+    await publishSyncSignal('order',guia,1);
     setCloudStatus('Firebase: EN VIVO · '+liveTime());
     return true;
   }catch(err){
@@ -548,7 +621,7 @@ function scheduleCloudSync(){
   setCloudStatus('Firebase: guardando...','saving');
   cloudSyncTimer=setTimeout(syncDBToCloud,220);
 }
-function configPayload(){return cleanCloudValue({version:15,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
+function configPayload(){return cleanCloudValue({version:16,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
 function mapPayload(group,key,val){
   const out=cleanCloudValue(val);
   if(group==='orders'&&!out.guia)out.guia=key;
@@ -592,7 +665,12 @@ async function syncDBToCloud(){
     ops.push(...diffMapOps('servi',FB.servi,db.sources.servi));
     ops.push(...diffMapOps('guidePhones',FB.guidePhones,db.sources.guidePhones));
     ops.push(...diffMapOps('snapshots',FB.snapshots,db.snapshots));
-    if(ops.length)await commitOps(ops);
+    if(ops.length){
+      const orderOps=ops.filter(op=>op.collection===FB.orders);
+      await commitOps(ops);
+      if(orderOps.length===1)await publishSyncSignal('order',orderOps[0].key,1);
+      else if(orderOps.length>1)await publishSyncSignal('bulk','',orderOps.length);
+    }
     // Update local fingerprints immediately; listeners will confirm them as well.
     cloudFP.config=cfgS;
     for(const [group,map] of [['orders',db.orders],['contacts',db.contacts],['tc',db.sources.tc],['servi',db.sources.servi],['guidePhones',db.sources.guidePhones],['snapshots',db.snapshots]]){
@@ -607,7 +685,7 @@ async function syncDBToCloud(){
   }finally{cloudSyncRunning=false}
 }
 async function readCollection(collection,group){
-  const snap=await fsDB.collection(collection).get(),map={};
+  const snap=await fsDB.collection(collection).get({source:'server'}),map={};
   snap.forEach(doc=>{const d=doc.data()||{},key=String(d.guia||d.socio||d.month||decodeURIComponent(doc.id));map[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d))});
   return map;
 }
@@ -623,34 +701,59 @@ function applyConfigDoc(d){
 }
 let cloudRenderTimer=null;
 function scheduleCloudRender(){clearTimeout(cloudRenderTimer);cloudRenderTimer=setTimeout(()=>{localCache();renderAll()},120)}
+function targetMapFor(group){
+  if(group==='orders')return db.orders;
+  if(group==='contacts')return db.contacts;
+  if(group==='tc')return db.sources.tc;
+  if(group==='servi')return db.sources.servi;
+  if(group==='guidePhones')return db.sources.guidePhones;
+  if(group==='snapshots')return db.snapshots;
+  return null;
+}
 function setupCloudListeners(){
-  fsDB.collection(FB.config).doc('principal').onSnapshot(doc=>{
-    if(!doc.exists)return;const d=doc.data();cloudFP.config=stableJSON(d);cloudApplying=true;applyConfigDoc(d);cloudApplying=false;scheduleCloudRender();
-  },err=>console.error(err));
-  const listenMap=(collection,group,target)=>{
-    fsDB.collection(collection).onSnapshot(snap=>{
+  fsDB.collection(FB.config).doc('principal').onSnapshot({includeMetadataChanges:true},doc=>{
+    if(!doc.exists)return;
+    const d=doc.data()||{};
+    cloudFP.config=stableJSON(d);
+    cloudApplying=true;applyConfigDoc(d);cloudApplying=false;
+    scheduleCloudRender();
+  },err=>{console.error('Config listener',err);setCloudStatus('Firebase: listener config falló','error')});
+
+  const listenMap=(collection,group)=>{
+    fsDB.collection(collection).onSnapshot({includeMetadataChanges:true},snap=>{
+      const target=targetMapFor(group);if(!target)return;
       cloudApplying=true;
       for(const ch of snap.docChanges()){
         const d=ch.doc.data()||{},key=String(d.guia||d.socio||d.month||decodeURIComponent(ch.doc.id));
-        if(ch.type==='removed'){delete target[key];delete cloudFP[group][key]}
-        else{
-          target[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d));
+        if(ch.type==='removed'){
+          delete target[key];delete cloudFP[group][key];
+        }else{
+          target[key]=d;
+          cloudFP[group][key]=stableJSON(mapPayload(group,key,d));
           if(group==='orders'&&d._syncClient&&d._syncClient!==CLIENT_ID){
             markRemotePulse(key);
-            setCloudStatus('Firebase: cambio recibido · '+liveTime());
           }
         }
       }
       cloudApplying=false;
+      if(!snap.metadata.fromCache)setCloudStatus('Firebase: EN VIVO · '+liveTime());
       scheduleCloudRender();
-    },err=>{console.error(err);setCloudStatus('Firebase: conexión interrumpida','error')});
+    },err=>{console.error(group+' listener',err);setCloudStatus('Firebase: conexión interrumpida','error')});
   };
-  listenMap(FB.orders,'orders',db.orders);
-  listenMap(FB.contacts,'contacts',db.contacts);
-  listenMap(FB.tc,'tc',db.sources.tc);
-  listenMap(FB.servi,'servi',db.sources.servi);
-  listenMap(FB.guidePhones,'guidePhones',db.sources.guidePhones);
-  listenMap(FB.snapshots,'snapshots',db.snapshots);
+
+  listenMap(FB.orders,'orders');
+  listenMap(FB.contacts,'contacts');
+  listenMap(FB.tc,'tc');
+  listenMap(FB.servi,'servi');
+  listenMap(FB.guidePhones,'guidePhones');
+  listenMap(FB.snapshots,'snapshots');
+
+  if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){}
+  syncSignalUnsub=fsDB.collection(FB.sync).doc('state').onSnapshot({includeMetadataChanges:true},doc=>{
+    if(!doc.exists)return;
+    const signal=doc.data()||{};
+    if(!doc.metadata.fromCache)processSyncSignal(signal);
+  },err=>console.error('Sync signal listener',err));
 }
 async function initFirebase(){
   try{
@@ -661,7 +764,7 @@ async function initFirebase(){
     fsDB=firebase.firestore();
     fsDB.settings({ignoreUndefinedProperties:true});
     const cfgRef=fsDB.collection(FB.config).doc('principal');
-    const cfgDoc=await cfgRef.get();
+    const cfgDoc=await cfgRef.get({source:'server'});
     firebaseReady=true;
     if(!cfgDoc.exists){
       // First Servientrega run in this Firebase project: migrate this browser's current data.
@@ -935,7 +1038,29 @@ $('savePupRule').addEventListener('click',()=>{const days=Math.max(0,Number($('p
 // Respaldo
 $('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();renderAll();toast('Respaldo importado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;db.orders={};saveDB();renderAll();toast('Pedidos abiertos eliminados')});
 $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none');$('socioModal').addEventListener('click',e=>{if(e.target===$('socioModal'))$('socioModal').style.display='none'});
+
+async function checkPublishedBuild(){
+  if(location.protocol!=='http:'&&location.protocol!=='https:')return;
+  try{
+    const base=location.origin+location.pathname;
+    const r=await fetch(base+(base.includes('?')?'&':'?')+'_buildcheck='+Date.now(),{cache:'no-store'});
+    if(!r.ok)return;
+    const txt=await r.text();
+    const m=txt.match(/const APP_BUILD='([^']+)'/);
+    if(m&&m[1]&&m[1]!==APP_BUILD){
+      const bs=$('buildStatus');if(bs)bs.textContent='Nueva versión '+m[1];
+      toast('Nueva versión publicada. Actualizando...');
+      setTimeout(()=>location.replace(base+'?_v='+encodeURIComponent(m[1])+'&t='+Date.now()),1800);
+    }
+  }catch(e){}
+}
+setTimeout(checkPublishedBuild,12000);
+setInterval(checkPublishedBuild,45000);
+
 renderAll();
+window.addEventListener('online',()=>{try{fsDB?.enableNetwork?.()}catch(e){};checkSyncStateFromServer()});
+window.addEventListener('focus',()=>checkSyncStateFromServer());
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkSyncStateFromServer()});
 initFirebase();
 </script>
 </body>
