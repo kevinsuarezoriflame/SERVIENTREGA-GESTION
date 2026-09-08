@@ -163,7 +163,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase conectado</span><br><span id="buildStatus" style="opacity:.75">v40</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v45</span></div>
 </aside>
 
 <main class="main">
@@ -389,14 +389,29 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
         <div class="listrow" style="grid-template-columns:1fr 1fr"><strong>5+ dígitos</strong><span>HD</span></div>
       </div>
     </div>
-    <details class="panel config-card full" id="syncTestPanel" style="padding:0;overflow:hidden">
-      <summary style="cursor:pointer;padding:16px 18px;font-weight:800;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px">
+  </div>
+</section>
+</main>
+</div>
+
+<div class="modal-bg" id="advancedToolsModal" style="display:none">
+  <div class="modal" style="width:min(1080px,94vw);max-width:1080px;max-height:90vh;overflow:auto">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:10px">
+      <div>
+        <h3 style="margin:0">🛠 Herramientas avanzadas</h3>
+        <div style="font-size:10px;color:#6D7A75;margin-top:4px">Panel oculto · Ctrl + Shift + O</div>
+      </div>
+      <button class="btn" id="closeAdvancedTools" type="button">×</button>
+    </div>
+
+    <details class="panel" id="syncTestPanel" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <summary style="cursor:pointer;padding:14px 16px;font-weight:800;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px">
         <span>🧪 Prueba masiva de sincronización · 100 guías</span>
-        <span style="font-size:10px;color:#6D7A75;font-weight:600">Solo Configuración · aislada de pedidos reales</span>
+        <span style="font-size:10px;color:#6D7A75;font-weight:600">Aislada de pedidos reales</span>
       </summary>
-      <div style="padding:0 18px 18px">
+      <div style="padding:0 16px 16px">
         <div class="rule-note" style="margin-bottom:10px">
-          Genera <b>100 guías ficticias TESTSYNC</b>. Copia y procesa Base Oriflame, Base Servientrega y Total Control para comprobar el aumento y los cambios en otra PC <b>sin F5</b>. La prueba está optimizada para escribir solo documentos que cambian y no fuerza relecturas completas. Al finalizar, <b>Limpiar las 100 pruebas</b> las retira mediante baja lógica; no borra pedidos reales.
+          Genera <b>100 guías ficticias TESTSYNC</b>. Copia y procesa Base Oriflame, Base Servientrega y Total Control para comprobar el aumento y los cambios en otro dispositivo <b>sin F5</b>. Al finalizar, <b>Limpiar las 100 pruebas</b> las retira mediante baja lógica y limpia también sus fuentes auxiliares.
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
           <button class="btn btn-green" id="syncTestCreate">Generar lote de 100</button>
@@ -405,19 +420,41 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
           <button class="btn" id="copyTestTc" disabled>Copiar Total Control · 100</button>
           <button class="btn btn-danger" id="syncTestCleanup" disabled>Limpiar las 100 pruebas</button>
         </div>
-        <div id="syncTestInfo" style="border:1px solid #D7E7E1;border-radius:9px;padding:10px 12px;background:#FAFCFB;font-size:11px;color:#43544D">
-          No hay una prueba preparada en esta PC.
+        <div id="syncTestInfo" style="border:1px solid #D7E7E1;border-radius:9px;padding:10px 12px;background:#FAFCFB;font-size:11px;color:#43544D">No hay una prueba preparada en esta PC.</div>
+      </div>
+    </details>
+
+    <details class="panel" open style="padding:0;overflow:hidden;margin-bottom:12px">
+      <summary style="cursor:pointer;padding:14px 16px;font-weight:800;list-style:none">💾 Datos locales</summary>
+      <div style="padding:0 16px 16px">
+        <div id="localDataSummary" class="rule-note" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="exportBackup">Exportar respaldo</button>
+          <label class="btn" for="importBackup">Importar respaldo</label>
+          <input id="importBackup" type="file" accept=".json" style="display:none">
+          <button class="btn btn-outline" id="restoreSafetyBackup">Recuperar copia local</button>
+          <button class="btn btn-danger" id="clearOrders">Borrar todos los pedidos abiertos</button>
         </div>
       </div>
     </details>
 
-    <div class="panel config-card full">
-      <h3>Datos locales</h3>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="exportBackup">Exportar respaldo</button><label class="btn" for="importBackup">Importar respaldo</label><input id="importBackup" type="file" accept=".json" style="display:none"><button class="btn btn-outline" id="restoreSafetyBackup">Recuperar copia local</button><button class="btn btn-danger" id="clearOrders">Borrar pedidos abiertos</button></div>
-    </div>
+    <details class="panel" open style="padding:0;overflow:hidden">
+      <summary style="cursor:pointer;padding:14px 16px;font-weight:800;list-style:none">🧹 Borrador masivo de guías</summary>
+      <div style="padding:0 16px 16px">
+        <div class="rule-note" style="margin-bottom:9px">
+          Úsalo cuando se haya pegado una base incorrecta. Pega <b>solo una columna de guías</b>. Se retirará cada guía de Pedidos y se vaciarán sus datos auxiliares de Base Servientrega, Total Control y teléfono por guía. <b>No elimina el Maestro de Contactos</b>, porque un socio puede estar asociado a otros pedidos.
+        </div>
+        <textarea id="bulkEraseGuides" placeholder="815448921
+815448922
+TESTSYNC202609..." style="width:100%;min-height:120px;resize:vertical;border:1px solid #B9D7CD;border-radius:9px;padding:10px;font:11px ui-monospace,SFMono-Regular,Consolas,monospace"></textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">
+          <button class="btn" id="bulkEraseAnalyze">Analizar guías</button>
+          <button class="btn btn-danger" id="bulkEraseRun" disabled>Retirar guías y borrar su contenido</button>
+        </div>
+        <div id="bulkErasePreview" style="margin-top:9px;border:1px solid #D7E7E1;border-radius:9px;padding:10px 12px;background:#FAFCFB;font-size:11px;color:#43544D">Pega una columna de guías para comenzar.</div>
+      </div>
+    </details>
   </div>
-</section>
-</main>
 </div>
 
 <div class="modal-bg" id="socioModal"><div class="modal"><h3>Datos del socio</h3><dl id="socioBody"></dl><div class="modal-actions"><button class="btn btn-green" id="closeSocio">Cerrar</button></div></div></div>
@@ -504,7 +541,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v43.20260908.1';
+const APP_BUILD='v45.20260908.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -532,15 +569,14 @@ function setCloudStatus(text,state=''){
   const el=$('cloudStatus');if(!el)return;
   const dot=document.querySelector('.sidebar-bottom .live-dot');
   const raw=String(text||'Firebase').replace(/^Firebase:\s*/i,'').trim();
-  const lower=raw.toLowerCase();
-  if(state==='error'||/(desconectado|sin conexión|error|permiso denegado|tiempo agotado|configuración)/i.test(raw))firebaseServerLive=false;
-  if(state!=='error'&&/(en vivo|conectado|guardado|sincronizado|confirmado|actualización recibida)/i.test(raw))firebaseServerLive=true;
-  const isSaving=state==='saving'||/(conectando|sincronizando|migrando|recuperando)/i.test(raw);
-  const ok=firebaseServerLive&&!isSaving;
-  el.textContent='Firebase · '+(raw|| (ok?'conectado':'desconectado'));
-  el.title=el.textContent;
-  el.style.color=state==='error'?'#ffd5d5':isSaving?'#fff1b8':'#fff';
-  if(dot)dot.style.background=state==='error'?'#ff8a8a':isSaving?'#ffd166':ok?'#70e6a2':'#c7d1cc';
+  if(state==='error'||/(desconectado|sin conexión|sin internet|error|permiso denegado|tiempo agotado|configuración)/i.test(raw))firebaseServerLive=false;
+  if(state!=='error'&&/(en vivo|conectado|guardado|sincronizado|confirmado|actualización recibida|cambio confirmado)/i.test(raw))firebaseServerLive=true;
+  // UI final: no mostrar contadores ni mensajes operativos en el sidebar.
+  // El detalle queda solo en tooltip para diagnóstico.
+  el.textContent='Firebase';
+  el.title='Firebase · '+raw;
+  el.style.color='#fff';
+  if(dot)dot.style.background=state==='error'?'#ff8a8a':firebaseServerLive?'#70e6a2':'#c7d1cc';
 }
 function firebaseErrorText(err){
   const code=String(err?.code||'').replace('firestore/','');
@@ -646,6 +682,18 @@ async function publishSyncSignal(kind,guide='',count=1,orderSyncAt=0){
     }),{merge:false});
   }catch(err){if(!handleWriteError(err,'Sync signal write'))console.error('Sync signal write',err)}
 }
+async function publishPurgeSignal(guides){
+  if(!firebaseReady||!fsDB)return;
+  const list=[...new Set((guides||[]).map(String).filter(Boolean))].slice(0,500);
+  const nonce=CLIENT_ID+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  lastSyncNonce=nonce;
+  try{
+    await fsDB.collection(FB.sync).doc('state').set(guardedData({
+      kind:'purge-guides',guides:list,count:list.length,client:CLIENT_ID,
+      nonce,at:Date.now(),build:APP_BUILD
+    }),{merge:false});
+  }catch(err){if(!handleWriteError(err,'Purge signal write'))console.error('Purge signal write',err)}
+}
 function activePageId(){return document.querySelector('.page.active')?.id||'pedidos'}
 function changedFields(a,b){
   const skip=new Set(['_syncClient','_syncAt','_writeGate','_writeNonce','_writerBuild']);
@@ -745,9 +793,19 @@ async function refreshOrdersFromServer(){
 function processSyncSignal(signal){
   if(!signal||signal.client===CLIENT_ID||!signal.nonce||signal.nonce===lastSyncNonce)return;
   lastSyncNonce=signal.nonce;
-  // v41: la señal NO provoca lecturas adicionales. El listener de pedidos recibe
-  // únicamente los documentos realmente modificados por Firestore.
-  if(signal.kind==='order'&&signal.guide){
+  // La señal no provoca relecturas masivas. El listener de pedidos recibe los cambios.
+  // Para un purge sí limpia las fuentes auxiliares locales, porque esas colecciones no
+  // se mantienen con listeners permanentes para ahorrar lecturas.
+  if(signal.kind==='purge-guides'&&Array.isArray(signal.guides)){
+    const guides=[...new Set(signal.guides.map(String).filter(Boolean))].slice(0,500);
+    for(const g of guides){
+      delete db.orders[g];delete db.sources.tc[g];delete db.sources.servi[g];delete db.sources.guidePhones[g];
+      delete cloudFP.orders[g];delete cloudFP.tc[g];delete cloudFP.servi[g];delete cloudFP.guidePhones[g];
+    }
+    localCache();
+    const p=activePageId();if(p==='pedidos')renderOrders();else if(p==='infobip')renderInfo();else if(p==='dashboard')renderDashboard();
+    setCloudStatus(`Firebase: ${guides.length} guías retiradas · ${liveTime()}`);
+  }else if(signal.kind==='order'&&signal.guide){
     setCloudStatus('Firebase: cambio remoto recibido · '+liveTime());
   }else if(signal.kind==='bulk'||String(signal.kind||'').endsWith('-bulk')){
     setCloudStatus(`Firebase: actualización en vivo · ${Number(signal.count||0)} cambios`);
@@ -1229,7 +1287,7 @@ async function initFirebase(){
     firebaseServerLive=false;
     setCloudStatus('Firebase: conectando');
 
-    saveSafetyBackup(db,'antes_de_firebase_v43');
+    saveSafetyBackup(db,'antes_de_firebase_v45');
 
     if(!window.firebase)throw new Error('Firebase SDK no cargó');
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -1776,8 +1834,8 @@ $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOB
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
 $('dMonth').addEventListener('change',renderDashboard);$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
-// Laboratorio de sincronización de bases · v43 · lote de 100
-const SYNC_TEST_KEY='servientrega_sync_test_v43';
+// Laboratorio de sincronización de bases · v45 · lote de 100
+const SYNC_TEST_KEY='servientrega_sync_test_v44';
 const SYNC_TEST_COUNT=100;
 function loadSyncTest(){try{return JSON.parse(localStorage.getItem(SYNC_TEST_KEY)||'null')}catch(e){return null}}
 function saveSyncTest(x){try{if(x)localStorage.setItem(SYNC_TEST_KEY,JSON.stringify(x));else localStorage.removeItem(SYNC_TEST_KEY)}catch(e){}}
@@ -1865,12 +1923,96 @@ async function cleanupSyncTest(){
       if(auxOps.length)await commitOps(auxOps);
       for(const guia of guides){delete cloudFP.orders[guia];delete cloudFP.tc[guia];delete cloudFP.servi[guia];delete cloudFP.guidePhones[guia]}
       delete cloudFP.contacts[socio];
-      await publishSyncSignal('test-cleanup-bulk','',guides.length,Date.now());
+      await publishPurgeSignal(guides);
       setCloudStatus('Firebase: ✓ 100 pruebas limpiadas · '+liveTime());
     }catch(err){console.error('Test cleanup',err);alert('Las pruebas se quitaron de esta PC, pero Firebase no confirmó toda la limpieza. No generes otro lote hasta revisar.');return}
   }
   saveSyncTest(null);renderSyncTestPanel();toast(`${guides.length} pruebas retiradas sin tocar pedidos reales`);
 }
+
+// Herramientas avanzadas ocultas · Ctrl+Shift+O
+function renderLocalDataSummary(){
+  const box=$('localDataSummary');if(!box)return;
+  const orders=Object.keys(db.orders||{}).length,contacts=Object.keys(db.contacts||{}).length,
+        tc=Object.keys(db.sources?.tc||{}).length,servi=Object.keys(db.sources?.servi||{}).length,
+        phones=Object.keys(db.sources?.guidePhones||{}).length;
+  let kb='';try{kb=(new Blob([JSON.stringify(db)]).size/1024).toFixed(1)+' KB'}catch(e){}
+  box.innerHTML=`Pedidos abiertos locales: <b>${orders}</b> · Contactos: <b>${contacts}</b> · TC auxiliar: <b>${tc}</b> · Servientrega auxiliar: <b>${servi}</b> · Teléfonos por guía: <b>${phones}</b>${kb?` · Tamaño aprox.: <b>${kb}</b>`:''}`;
+}
+function openAdvancedTools(){
+  const m=$('advancedToolsModal');if(!m)return;m.style.display='flex';renderSyncTestPanel();renderLocalDataSummary();renderBulkErasePreview();
+}
+function closeAdvancedTools(){const m=$('advancedToolsModal');if(m)m.style.display='none'}
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.shiftKey&&String(e.key||'').toLowerCase()==='o'){
+    e.preventDefault();e.stopPropagation();
+    const m=$('advancedToolsModal');if(m?.style.display==='flex')closeAdvancedTools();else openAdvancedTools();
+  }
+},true);
+$('closeAdvancedTools')?.addEventListener('click',closeAdvancedTools);
+$('advancedToolsModal')?.addEventListener('click',e=>{if(e.target===$('advancedToolsModal'))closeAdvancedTools()});
+
+// Borrador masivo seguro de guías: baja lógica en 4 colecciones y limpieza local.
+let bulkErasePrepared=[];
+function parseBulkEraseGuides(text){
+  const out=[];
+  for(const raw of String(text||'').replace(/\r/g,'').split(/\n+/)){
+    const cell=raw.split(/[\t;,]/)[0].trim().replace(/^['\"]|['\"]$/g,'');
+    if(!cell||/^(GUIA|WAYBILL_NUMBER|NO_GUIA)$/i.test(cell))continue;
+    if(/^TESTSYNC[A-Z0-9_-]+$/i.test(cell)||/^\d{8,15}$/.test(cell))out.push(cell);
+  }
+  return [...new Set(out)];
+}
+function bulkEraseStats(guides){
+  let orders=0,tc=0,servi=0,phones=0;
+  for(const g of guides){if(db.orders?.[g])orders++;if(db.sources?.tc?.[g])tc++;if(db.sources?.servi?.[g])servi++;if(db.sources?.guidePhones?.[g])phones++}
+  return{orders,tc,servi,phones};
+}
+function renderBulkErasePreview(){
+  const box=$('bulkErasePreview'),btn=$('bulkEraseRun');if(!box)return;
+  const guides=parseBulkEraseGuides($('bulkEraseGuides')?.value||'');bulkErasePrepared=guides;
+  if(btn)btn.disabled=!guides.length;
+  if(!guides.length){box.innerHTML='Pega una columna de guías para comenzar.';return}
+  const st=bulkEraseStats(guides),sample=guides.slice(0,8).map(escapeHtml).join(', '),writes=guides.length*4+1;
+  box.innerHTML=`Se detectaron <b>${guides.length}</b> guías únicas. En esta PC: <b>${st.orders}</b> pedidos, <b>${st.servi}</b> fuentes Servientrega, <b>${st.tc}</b> fuentes TC y <b>${st.phones}</b> teléfonos por guía. Firebase recibirá como máximo aprox. <b>${writes} escrituras</b> (4 tombstones por guía + 1 señal), sin relectura masiva.<div style="margin-top:6px;color:#6D7A75">Muestra: ${sample}${guides.length>8?'…':''}</div>`;
+}
+$('bulkEraseAnalyze')?.addEventListener('click',renderBulkErasePreview);
+$('bulkEraseGuides')?.addEventListener('input',()=>{bulkErasePrepared=[];const b=$('bulkEraseRun');if(b)b.disabled=true});
+$('bulkEraseRun')?.addEventListener('click',async()=>{
+  const guides=parseBulkEraseGuides($('bulkEraseGuides')?.value||'');
+  if(!guides.length)return alert('No se detectaron guías válidas. Pega solo una columna de guías.');
+  if(guides.length>500)return alert('Por seguridad, procesa máximo 500 guías por lote.');
+  renderBulkErasePreview();
+  const st=bulkEraseStats(guides);
+  const confirm1=confirm(`Vas a retirar ${guides.length} guías de Servientrega.\n\nEn esta PC se encontraron ${st.orders} pedidos activos.\nTambién se vaciarán TC, status Servientrega y teléfono por guía.\n\nNo se borrará el Maestro de Contactos. ¿Continuar?`);
+  if(!confirm1)return;
+  const typed=prompt(`Confirmación final: escribe BORRAR ${guides.length}`,'');
+  if(String(typed||'').trim().toUpperCase()!==`BORRAR ${guides.length}`)return alert('Confirmación cancelada. No se modificó nada.');
+  saveSafetyBackup(db,'antes_de_borrador_masivo');
+  for(const g of guides){delete db.orders[g];delete db.sources.tc[g];delete db.sources.servi[g];delete db.sources.guidePhones[g]}
+  localCache();renderAll();renderLocalDataSummary();
+  if(firebaseReady){
+    try{
+      setCloudStatus(`Firebase: retirando ${guides.length} guías...`,'saving');
+      const ops=[];
+      for(const g of guides){
+        ops.push({type:'delete',collection:FB.orders,key:g});
+        ops.push({type:'delete',collection:FB.servi,key:g});
+        ops.push({type:'delete',collection:FB.tc,key:g});
+        ops.push({type:'delete',collection:FB.guidePhones,key:g});
+      }
+      await commitOps(ops);
+      for(const g of guides){delete cloudFP.orders[g];delete cloudFP.tc[g];delete cloudFP.servi[g];delete cloudFP.guidePhones[g]}
+      await publishPurgeSignal(guides);
+      setCloudStatus(`Firebase: ✓ ${guides.length} guías retiradas · ${liveTime()}`);
+    }catch(err){
+      console.error('Borrador masivo',err);
+      alert('Se quitaron de esta PC, pero Firebase no confirmó toda la operación. Usa Recuperar copia local si necesitas revertir y revisa la conexión antes de continuar.');
+      return;
+    }
+  }
+  $('bulkEraseGuides').value='';bulkErasePrepared=[];renderBulkErasePreview();toast(`${guides.length} guías retiradas de forma segura`);
+});
 
 // Config
 $('syncTestCreate')?.addEventListener('click',()=>{
@@ -1934,14 +2076,14 @@ async function checkPublishedBuild(){
     const txt=await r.text();
     const m=txt.match(/const APP_BUILD='([^']+)'/);
     if(m&&m[1]&&m[1]!==APP_BUILD){
-      const bs=$('buildStatus');if(bs)bs.textContent='Actualizando a '+m[1];
+      const bs=$('buildStatus');if(bs)bs.textContent=m[1];
       setCloudStatus('Nueva versión detectada...');
       toast('Nueva versión publicada. Actualizando...');
       setTimeout(()=>{
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v43';
+      const bs=$('buildStatus');if(bs)bs.textContent='v45';
     }
   }catch(e){
     console.warn('Build check',e);
