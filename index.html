@@ -163,7 +163,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v45</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v46</span></div>
 </aside>
 
 <main class="main">
@@ -541,7 +541,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v45.20260908.1';
+const APP_BUILD='v46.20260908.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1165,32 +1165,75 @@ async function getCloudDoc(collection,key){
   }catch(err){console.warn('Targeted source read',collection,key,err);return null}
 }
 
-async function hydrateGuideFromCloudSources(guia){
-  if(!firebaseReady||!db.orders[guia])return false;
-  const o=db.orders[guia],before={...o};
-  if(!db.sources.tc[guia]){const d=await getCloudDoc(FB.tc,guia);if(d){db.sources.tc[guia]=d;cloudFP.tc[guia]=stableJSON(mapPayload('tc',guia,d))}}
-  if(!db.sources.servi[guia]){const d=await getCloudDoc(FB.servi,guia);if(d){db.sources.servi[guia]=d;cloudFP.servi[guia]=stableJSON(mapPayload('servi',guia,d))}}
-  if(!o.celular&&!db.sources.guidePhones[guia]){const d=await getCloudDoc(FB.guidePhones,guia);if(d){db.sources.guidePhones[guia]=d;cloudFP.guidePhones[guia]=stableJSON(mapPayload('guidePhones',guia,d))}}
-  applyTcSource(o);
-  if(!o.celular&&o.socio&&!db.contacts[o.socio]){const d=await getCloudDoc(FB.contacts,o.socio);if(d){db.contacts[o.socio]=d;cloudFP.contacts[o.socio]=stableJSON(mapPayload('contacts',o.socio,d))}}
-  reconcileOrder(o);
-  if(!sameOrder(before,o)){
-    o._syncClient=CLIENT_ID;o._syncAt=Date.now();
-    return true;
+async function getCloudDocsByKeys(collection,keys,keyField='guia'){
+  const list=[...new Set((keys||[]).map(String).filter(Boolean))];
+  const out={};
+  if(!firebaseReady||!fsDB||!list.length)return out;
+  const field=firebase.firestore.FieldPath.documentId();
+  // v46: consultas por lotes. Una base Oriflame de miles de guías ya NO hace 3-4 GET por guía.
+  // En Firestore moderno el operador IN admite hasta 30 valores; si una red/SDK devuelve
+  // invalid-argument, repetimos ese lote en bloques de 10 por compatibilidad.
+  async function fetchChunk(chunk){
+    const ids=chunk.map(safeDocId);
+    try{
+      const snap=await fsDB.collection(collection).where(field,'in',ids).get({source:'server'});
+      snap.forEach(doc=>{
+        const d=stripWriteGuard(doc.data()||{});if(d._deleted)return;
+        const key=String(d[keyField]||d.guia||d.socio||decodeURIComponent(doc.id));
+        out[key]=d;
+      });
+    }catch(err){
+      const code=String(err?.code||'');
+      if(code.includes('invalid-argument')&&chunk.length>10){
+        for(let i=0;i<chunk.length;i+=10)await fetchChunk(chunk.slice(i,i+10));
+        return;
+      }
+      console.warn('Bulk targeted source read',collection,err);
+      throw err;
+    }
   }
-  return false;
+  for(let i=0;i<list.length;i+=30){
+    try{await fetchChunk(list.slice(i,i+30))}
+    catch(err){
+      // Si la cuota/red falla, paramos el cruce auxiliar. La carga principal de pedidos
+      // ya puede sincronizarse sin depender de estas lecturas.
+      break;
+    }
+  }
+  return out;
 }
 
 async function hydrateGuidesFromCloudSources(guides){
-  // Las guías TESTSYNC son aisladas y recién generadas: no hacemos 3 lecturas dirigidas por guía.
-  const list=[...new Set((guides||[]).map(String).filter(Boolean))].filter(g=>!db.orders?.[g]?._testSync);
+  // v46: cruce auxiliar MASIVO y liviano. Solo se usa para guías NUEVAS y solo busca
+  // fuentes que no estén ya en el localStorage de esta misma PC.
+  const list=[...new Set((guides||[]).map(String).filter(Boolean))].filter(g=>db.orders?.[g]&&!db.orders[g]._testSync);
   if(!firebaseReady||!list.length)return [];
+  const beforeMap=Object.fromEntries(list.map(g=>[g,{...db.orders[g]}]));
+
+  const needTc=list.filter(g=>!db.sources.tc[g]);
+  const needServi=list.filter(g=>!db.sources.servi[g]);
+  const needPhones=list.filter(g=>!db.orders[g]?.celular&&!db.sources.guidePhones[g]);
+
+  const [tcMap,serviMap,phoneMap]=await Promise.all([
+    getCloudDocsByKeys(FB.tc,needTc,'guia'),
+    getCloudDocsByKeys(FB.servi,needServi,'guia'),
+    getCloudDocsByKeys(FB.guidePhones,needPhones,'guia')
+  ]);
+  for(const [g,d] of Object.entries(tcMap)){db.sources.tc[g]=d;cloudFP.tc[g]=stableJSON(mapPayload('tc',g,d))}
+  for(const [g,d] of Object.entries(serviMap)){db.sources.servi[g]=d;cloudFP.servi[g]=stableJSON(mapPayload('servi',g,d))}
+  for(const [g,d] of Object.entries(phoneMap)){db.sources.guidePhones[g]=d;cloudFP.guidePhones[g]=stableJSON(mapPayload('guidePhones',g,d))}
+
+  // Primero aplicamos TC para conocer el socio y después consultamos contactos faltantes por lote.
+  for(const g of list)applyTcSource(db.orders[g]);
+  const socios=[...new Set(list.map(g=>db.orders[g]?.socio).filter(s=>s&&!db.contacts[s]))];
+  const contactMap=await getCloudDocsByKeys(FB.contacts,socios,'socio');
+  for(const [s,d] of Object.entries(contactMap)){db.contacts[s]=d;cloudFP.contacts[s]=stableJSON(mapPayload('contacts',s,d))}
+
   const changed=[];
-  // Concurrencia limitada: evita ráfagas masivas de lecturas.
-  for(let i=0;i<list.length;i+=12){
-    const chunk=list.slice(i,i+12);
-    const res=await Promise.all(chunk.map(async g=>[g,await hydrateGuideFromCloudSources(g)]));
-    for(const [g,ok] of res)if(ok)changed.push(g);
+  for(const g of list){
+    const o=db.orders[g];if(!o)continue;
+    reconcileOrder(o);
+    if(!sameOrder(beforeMap[g],o)){o._syncClient=CLIENT_ID;o._syncAt=Date.now();changed.push(g)}
   }
   if(changed.length)localCache();
   return changed;
@@ -1287,7 +1330,7 @@ async function initFirebase(){
     firebaseServerLive=false;
     setCloudStatus('Firebase: conectando');
 
-    saveSafetyBackup(db,'antes_de_firebase_v45');
+    saveSafetyBackup(db,'antes_de_firebase_v46');
 
     if(!window.firebase)throw new Error('Firebase SDK no cargó');
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -1400,7 +1443,7 @@ async function rowsFromFile(input){const f=input.files?.[0];if(!f)throw new Erro
 function showResult(id,msg){const el=$(id);el.style.display='block';el.innerHTML=msg}
 function processNormalRows(rows){
   let created=0,updated=0,unchanged=0,skipped=0,nonServi=0,unassigned=0,missingChannel=0;
-  const changedGuides=[],guidePhoneGuides=[];
+  const changedGuides=[],createdGuides=[],guidePhoneGuides=[];
   for(const r of rows){
     const courier=N(getObjValue(r,['COURIER']));if(courier&&!courier.includes('SERVIENTREGA')){nonServi++;continue}
     const guia=String(getObjValue(r,['NO GUIA','NO_GUIA','GUIA','WAYBILL_NUMBER'])).trim();if(!guia){skipped++;continue}
@@ -1422,11 +1465,11 @@ function processNormalRows(rows){
     if(directCell){rememberGuidePhone(guia,directCell,'Base Oriflame');guidePhoneGuides.push(guia)}
     o.canal=channel(cod);o.provincia=inferProvince(o);o.responsable=assignOwner(o);reconcileOrder(o);
     if(!o.canal)missingChannel++;if(!o.responsable)unassigned++;
-    if(old.guia){if(sameOrder(old,o)){unchanged++;continue}updated++}else created++;
+    if(old.guia){if(sameOrder(old,o)){unchanged++;continue}updated++}else{created++;createdGuides.push(guia)}
     o._syncClient=CLIENT_ID;o._syncAt=Date.now();db.orders[guia]=o;changedGuides.push(guia);
   }
   localCache();
-  return{created,updated,unchanged,skipped,nonServi,unassigned,missingChannel,changedGuides:[...new Set(changedGuides)],guidePhoneGuides:[...new Set(guidePhoneGuides)]};
+  return{created,updated,unchanged,skipped,nonServi,unassigned,missingChannel,changedGuides:[...new Set(changedGuides)],createdGuides:[...new Set(createdGuides)],guidePhoneGuides:[...new Set(guidePhoneGuides)]};
 }
 function processServiRows(rows){
   let updated=0,unchanged=0,locked=0,notFound=0,empty=0,deliveredNow=0,stored=0;
@@ -1811,12 +1854,38 @@ $('gestionText').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key
 
 // Cargas
 $('processNormal').addEventListener('click',async()=>{
-  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal');btn.disabled=true;try{const r=processNormalRows(rows);const hydrated=await hydrateGuidesFromCloudSources(r.changedGuides);r.changedGuides=[...new Set([...r.changedGuides,...hydrated])];renderAll();const ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtNormal').value=''}finally{btn.disabled=false}});
+  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';
+  try{
+    const r=processNormalRows(rows);
+    // v46: la base aparece INMEDIATAMENTE en esta PC y se envía a Firebase antes de cualquier cruce auxiliar.
+    renderAll();
+    let ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
+    let hydrated=[];
+    if(ok&&r.createdGuides?.length){
+      hydrated=await hydrateGuidesFromCloudSources(r.createdGuides);
+      if(hydrated.length){renderAll();ok=await syncExplicitBulkNow('oriflame-cruce',{orderGuides:hydrated})&&ok}
+    }
+    showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''}${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase; conserva esta base y reintenta cuando haya cuota</b>'}`);
+    if(ok)$('txtNormal').value='';
+  }finally{btn.disabled=false;btn.textContent=oldText}
+});
 $('processServi').addEventListener('click',async()=>{
-  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processServi');btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processServiRows(rows);renderAll();const ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides});showResult('resServi',`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtServi').value=''}finally{btn.disabled=false;btn.textContent='Actualizar status'}});
+  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processServi');btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processServiRows(rows);renderAll();const ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides});showResult('resServi',`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`);if(ok)$('txtServi').value=''}finally{btn.disabled=false;btn.textContent='Actualizar status'}});
 $('processTc').addEventListener('click',async()=>{
-  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processTc');btn.disabled=true;try{const r=processTcRows(rows);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtTc').value=''}finally{btn.disabled=false}});
-async function processFile(inputId,type,resultId){try{const rows=await rowsFromFile($(inputId));let r,ok=false;if(type==='normal'){r=processNormalRows(rows);const hydrated=await hydrateGuidesFromCloudSources(r.changedGuides);r.changedGuides=[...new Set([...r.changedGuides,...hydrated])];renderAll();ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides})}if(type==='servi'){r=processServiRows(rows);renderAll();ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides})}if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`)}catch(e){alert(e.message||e)}}
+  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processTc'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processTcRows(rows);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase; conserva TC y reintenta</b>'}`);if(ok)$('txtTc').value=''}finally{btn.disabled=false;btn.textContent=oldText}});
+async function processFile(inputId,type,resultId){
+  try{
+    const rows=await rowsFromFile($(inputId));let r,ok=false,hydrated=[];
+    if(type==='normal'){
+      r=processNormalRows(rows);renderAll();
+      ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
+      if(ok&&r.createdGuides?.length){hydrated=await hydrateGuidesFromCloudSources(r.createdGuides);if(hydrated.length){renderAll();ok=await syncExplicitBulkNow('oriflame-cruce',{orderGuides:hydrated})&&ok}}
+    }
+    if(type==='servi'){r=processServiRows(rows);renderAll();ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides})}
+    if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}
+    showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''}${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`)
+  }catch(e){alert(e.message||e)}
+}
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
 // INFOBIP
 ['iMonth','iDate','iOwner','iChannel'].forEach(id=>$(id).addEventListener('change',renderInfo));
@@ -1834,7 +1903,7 @@ $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOB
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
 $('dMonth').addEventListener('change',renderDashboard);$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
-// Laboratorio de sincronización de bases · v45 · lote de 100
+// Laboratorio de sincronización de bases · v46 · lote de 100
 const SYNC_TEST_KEY='servientrega_sync_test_v44';
 const SYNC_TEST_COUNT=100;
 function loadSyncTest(){try{return JSON.parse(localStorage.getItem(SYNC_TEST_KEY)||'null')}catch(e){return null}}
@@ -2083,7 +2152,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v45';
+      const bs=$('buildStatus');if(bs)bs.textContent='v46';
     }
   }catch(e){
     console.warn('Build check',e);
