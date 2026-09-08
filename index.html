@@ -163,7 +163,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom">Gestión Servientrega · Oriflame<br><span class="live-dot"></span><span id="cloudStatus">Firebase: conectando...</span><br><span id="buildStatus" style="opacity:.75">v33 · ESCRITURA PROTEGIDA</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase conectado</span><br><span id="buildStatus" style="opacity:.75">v38</span></div>
 </aside>
 
 <main class="main">
@@ -390,7 +390,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     </div>
     <div class="panel config-card full">
       <h3>Datos locales</h3>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="exportBackup">Exportar respaldo</button><label class="btn" for="importBackup">Importar respaldo</label><input id="importBackup" type="file" accept=".json" style="display:none"><button class="btn btn-danger" id="clearOrders">Borrar pedidos abiertos</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="exportBackup">Exportar respaldo</button><label class="btn" for="importBackup">Importar respaldo</label><input id="importBackup" type="file" accept=".json" style="display:none"><button class="btn btn-outline" id="restoreSafetyBackup">Recuperar copia local</button><button class="btn btn-danger" id="clearOrders">Borrar pedidos abiertos</button></div>
     </div>
   </div>
 </section>
@@ -454,6 +454,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
 
 <script>
 const STORAGE_KEY='servientrega_oriflame_real_v1';
+const SAFETY_BACKUP_KEY='servientrega_oriflame_safety_backup_v34';
 const DEFAULT_ZONES=[{"zone": "AZUAY", "owner": "Alba"}, {"zone": "CUENCA", "owner": "Alba"}, {"zone": "LOJA- EL SAGRARIO", "owner": "Alba"}, {"zone": "CHORDELEG", "owner": "Alba"}, {"zone": "BOLIVAR", "owner": "Alba"}, {"zone": "CANAR", "owner": "Alba"}, {"zone": "CAÑAR", "owner": "Alba"}, {"zone": "AZOGUEZ", "owner": "Alba"}, {"zone": "CARCHI", "owner": "Alba"}, {"zone": "RIOBAMBA", "owner": "Alba"}, {"zone": "GALAPAGOS", "owner": "Alba"}, {"zone": "LOJA", "owner": "Alba"}, {"zone": "LOS RIOS", "owner": "Alba"}, {"zone": "EL CHACO", "owner": "Alba"}, {"zone": "NAPO", "owner": "Alba"}, {"zone": "PASTAZA", "owner": "Alba"}, {"zone": "PUYO", "owner": "Alba"}, {"zone": "PICHINCHA", "owner": "Alba"}, {"zone": "QUITO", "owner": "Alba"}, {"zone": "VALLE DE LOS CHILLOS", "owner": "Alba"}, {"zone": "SANTA ELENA", "owner": "Alba"}, {"zone": "TUNGURAHUA", "owner": "Alba"}, {"zone": "AMBATO", "owner": "Alba"}, {"zone": "PROGRESO", "owner": "Alba"}, {"zone": "GUARANDA", "owner": "Alba"}, {"zone": "COTOPAXI", "owner": "Alba"}, {"zone": "DURAN", "owner": "Daysi"}, {"zone": "ZAMORA CHINCHIPE", "owner": "Daysi"}, {"zone": "GUAYAS", "owner": "Daysi"}, {"zone": "ZAMORA", "owner": "Daysi"}, {"zone": "CHIMBORAZO", "owner": "Daysi"}, {"zone": "EL GUANO", "owner": "Daysi"}, {"zone": "MORONA SANTIAGO", "owner": "Daysi"}, {"zone": "EL ORO", "owner": "Daysi"}, {"zone": "ELORO", "owner": "Daysi"}, {"zone": "ESMERALDAS", "owner": "Daysi"}, {"zone": "COLIMES", "owner": "Daysi"}, {"zone": "GUAYAQUIL", "owner": "Daysi"}, {"zone": "MILAGRO", "owner": "Daysi"}, {"zone": "POSORJA", "owner": "Daysi"}, {"zone": "NARANJITO", "owner": "Daysi"}, {"zone": "TENGUEL", "owner": "Daysi"}, {"zone": "NARANJAL", "owner": "Daysi"}, {"zone": "PEDRO CARBO", "owner": "Daysi"}, {"zone": "GUAYAQUILHUERTA FRENTE A PARADA DE LA METROVIA", "owner": "Daysi"}, {"zone": "EL TRIUNFO", "owner": "Daysi"}, {"zone": "DAULE", "owner": "Daysi"}, {"zone": "SAMBORONDON", "owner": "Daysi"}, {"zone": "VIRGEN DE FATIMA KM 26", "owner": "Daysi"}, {"zone": "PALESTINA", "owner": "Daysi"}, {"zone": "LOMAS DE SARGENTILLO", "owner": "Daysi"}, {"zone": "ISIDRO AYORA", "owner": "Daysi"}, {"zone": "BALZAR", "owner": "Daysi"}, {"zone": "SALITRE", "owner": "Daysi"}, {"zone": "YAGUACHI", "owner": "Daysi"}, {"zone": "BUCAY", "owner": "Daysi"}, {"zone": "IMBABURA", "owner": "Daysi"}, {"zone": "IBARRA", "owner": "Daysi"}, {"zone": "MANABI", "owner": "Daysi"}, {"zone": "JIPIJAPA", "owner": "Daysi"}, {"zone": "EL CARMEN", "owner": "Daysi"}, {"zone": "MOMPICHE", "owner": "Daysi"}, {"zone": "ORELLANA", "owner": "Daysi"}, {"zone": "SANTO DOMINGO", "owner": "Daysi"}, {"zone": "SANTO DOMINGO DE LOS TSACHILAS", "owner": "Daysi"}, {"zone": "SUCUMBIOS", "owner": "Daysi"}, {"zone": "PIMAMPIRO", "owner": "Daysi"}, {"zone": "JUJAN", "owner": "Daysi"}];
 const DEFAULT_CLAIMS=[{"name": "FUERA DE COBERTURA", "desc": "No llega el camión al sector"}, {"name": "CAMBIO DE DIRECCIÓN", "desc": "Cliente o socio solicita cambio de domicilio"}, {"name": "NUMERO EQUIVOCADO", "desc": "Número de celular equivocado"}, {"name": "CAMBIO A PUP", "desc": "Cliente no está en domicilio y solicita retiro de oficina"}, {"name": "ZONA PELIGROSA", "desc": "La zona es de alto riesgo y el camión no puede ingresar"}, {"name": "DEVOLUCION DE OFICINA", "desc": "El cliente no retiró su pedido en la oficina dentro del plazo"}, {"name": "DEVOLUCION AL REMITENTE", "desc": "Devolución por solicitud de Oriflame o por intentos de entrega"}, {"name": "DEVOLUCION CLIENTE NO DESEA", "desc": "Cliente no desea o no ha realizado pedido"}, {"name": "DEVOLUCION CLIENTE NO RETIRA", "desc": "Cliente no se ha acercado a retirar su pedido"}, {"name": "DIRECCION INCORRECTA", "desc": "Dirección proporcionada en la guía está incorrecta"}, {"name": "DATOS INCOMPLETOS", "desc": "Información de la guía insuficiente"}, {"name": "CIERRE DE VIAS", "desc": "Calles afectadas"}, {"name": "TRAYECTO ESPECIAL", "desc": "Cobertura uno o dos días por semana"}, {"name": "NO HAY QUIEN RECIBA", "desc": "No hay quien reciba en el domicilio"}, {"name": "NO CONTESTA", "desc": "No contesta para coordinar entrega"}, {"name": "SINIESTRO", "desc": "Siniestro de carga"}, {"name": "CELULAR INCORRECTO", "desc": "No registra WhatsApp o está equivocado"}, {"name": "NOVEDAD COURIER", "desc": "Novedad atribuible a Servientrega"}, {"name": "Cierre de vías2", "desc": "Deslizamientos de tierra"}, {"name": "BLOQUEO DE VÍAS", "desc": "Bloqueo por manifestación"}];
 const CANTON_PROV={"CUENCA": "AZUAY", "GIRON": "AZUAY", "GUALACEO": "AZUAY", "NABON": "AZUAY", "PAUTE": "AZUAY", "PUCARA": "AZUAY", "SAN FERNANDO": "AZUAY", "SANTA ISABEL": "AZUAY", "SIGSIG": "AZUAY", "ONA": "AZUAY", "CHORDELEG": "AZUAY", "EL PAN": "AZUAY", "SEVILLA DE ORO": "AZUAY", "GUACHAPALA": "AZUAY", "CAMILO PONCE ENRIQUEZ": "AZUAY", "GUARANDA": "BOLIVAR", "CHILLANES": "BOLIVAR", "CHIMBO": "BOLIVAR", "ECHEANDIA": "BOLIVAR", "SAN MIGUEL": "BOLIVAR", "CALUMA": "BOLIVAR", "LAS NAVES": "BOLIVAR", "AZOGUES": "CANAR", "BIBLIAN": "CANAR", "CANAR": "CANAR", "LA TRONCAL": "CANAR", "EL TAMBO": "CANAR", "DELEG": "CANAR", "SUSCAL": "CANAR", "TULCAN": "CARCHI", "BOLIVAR": "MANABI", "ESPEJO": "CARCHI", "MIRA": "CARCHI", "MONTUFAR": "CARCHI", "SAN PEDRO DE HUACA": "CARCHI", "LATACUNGA": "COTOPAXI", "LA MANA": "COTOPAXI", "PANGUA": "COTOPAXI", "PUJILI": "COTOPAXI", "SALCEDO": "COTOPAXI", "SAQUISILI": "COTOPAXI", "SIGCHOS": "COTOPAXI", "RIOBAMBA": "CHIMBORAZO", "ALAUSI": "CHIMBORAZO", "COLTA": "CHIMBORAZO", "CHAMBO": "CHIMBORAZO", "GUAMOTE": "CHIMBORAZO", "GUANO": "CHIMBORAZO", "PALLATANGA": "CHIMBORAZO", "PENIPE": "CHIMBORAZO", "CUMANDA": "CHIMBORAZO", "MACHALA": "EL ORO", "ARENILLAS": "EL ORO", "ATAHUALPA": "EL ORO", "BALSAS": "EL ORO", "CHILLA": "EL ORO", "EL GUABO": "EL ORO", "HUAQUILLAS": "EL ORO", "MARCABELI": "EL ORO", "PASAJE": "EL ORO", "PINAS": "EL ORO", "PORTOVELO": "EL ORO", "SANTA ROSA": "EL ORO", "ZARUMA": "EL ORO", "LAS LAJAS": "EL ORO", "ESMERALDAS": "ESMERALDAS", "ELOY ALFARO": "ESMERALDAS", "MUISNE": "ESMERALDAS", "QUININDE": "ESMERALDAS", "SAN LORENZO": "ESMERALDAS", "ATACAMES": "ESMERALDAS", "RIOVERDE": "ESMERALDAS", "GUAYAQUIL": "GUAYAS", "ALFREDO BAQUERIZO MORENO": "GUAYAS", "BALAO": "GUAYAS", "BALZAR": "GUAYAS", "COLIMES": "GUAYAS", "DAULE": "GUAYAS", "DURAN": "GUAYAS", "EL EMPALME": "GUAYAS", "ISIDRO AYORA": "GUAYAS", "LOMAS DE SARGENTILLO": "GUAYAS", "MILAGRO": "GUAYAS", "NARANJAL": "GUAYAS", "NARANJITO": "GUAYAS", "PALESTINA": "GUAYAS", "PEDRO CARBO": "GUAYAS", "PLAYAS": "GUAYAS", "SAMBORONDON": "GUAYAS", "SANTA LUCIA": "GUAYAS", "SALITRE": "GUAYAS", "SIMON BOLIVAR": "GUAYAS", "YAGUACHI": "GUAYAS", "POSORJA": "GUAYAS", "IBARRA": "IMBABURA", "ANTONIO ANTE": "IMBABURA", "COTACACHI": "IMBABURA", "OTAVALO": "IMBABURA", "PIMAMPIRO": "IMBABURA", "SAN MIGUEL DE URCUQUI": "IMBABURA", "LOJA": "LOJA", "CALVAS": "LOJA", "CATAMAYO": "LOJA", "CELICA": "LOJA", "ESPINDOLA": "LOJA", "GONZANAMA": "LOJA", "MACARA": "LOJA", "OLMEDO": "MANABI", "PALTAS": "LOJA", "PUYANGO": "LOJA", "QUILANGA": "LOJA", "SARAGURO": "LOJA", "SOZORANGA": "LOJA", "ZAPOTILLO": "LOJA", "BABAHOYO": "LOS RIOS", "BABA": "LOS RIOS", "BUENA FE": "LOS RIOS", "MONTALVO": "LOS RIOS", "PUEBLOVIEJO": "LOS RIOS", "QUEVEDO": "LOS RIOS", "URDANETA": "LOS RIOS", "VENTANAS": "LOS RIOS", "VINCES": "LOS RIOS", "PALENQUE": "LOS RIOS", "QUINSALOMA": "LOS RIOS", "VALENCIA": "LOS RIOS", "PORTOVIEJO": "MANABI", "CHONE": "MANABI", "EL CARMEN": "MANABI", "FLAVIO ALFARO": "MANABI", "JIPIJAPA": "MANABI", "JUNIN": "MANABI", "MANTA": "MANABI", "MONTECRISTI": "MANABI", "PAJAN": "MANABI", "PICHINCHA": "MANABI", "ROCAFUERTE": "MANABI", "SANTA ANA": "MANABI", "SUCRE": "MANABI", "TOSAGUA": "MANABI", "24 DE MAYO": "MANABI", "PEDERNALES": "MANABI", "PUERTO LOPEZ": "MANABI", "JAMA": "MANABI", "JARAMIJO": "MANABI", "SAN VICENTE": "MANABI", "MORONA": "MORONA SANTIAGO", "GUALAQUIZA": "MORONA SANTIAGO", "LIMON INDANZA": "MORONA SANTIAGO", "PALORA": "MORONA SANTIAGO", "SANTIAGO": "MORONA SANTIAGO", "SUCUA": "MORONA SANTIAGO", "HUAMBOYA": "MORONA SANTIAGO", "SAN JUAN BOSCO": "MORONA SANTIAGO", "TAISHA": "MORONA SANTIAGO", "LOGRONO": "MORONA SANTIAGO", "PABLO SEXTO": "MORONA SANTIAGO", "TIWINTZA": "MORONA SANTIAGO", "TENA": "NAPO", "ARCHIDONA": "NAPO", "EL CHACO": "NAPO", "QUIJOS": "NAPO", "CARLOS JULIO AROSEMENA TOLA": "NAPO", "ORELLANA": "ORELLANA", "AGUARICO": "ORELLANA", "LA JOYA DE LOS SACHAS": "ORELLANA", "LORETO": "ORELLANA", "PASTAZA": "PASTAZA", "MERA": "PASTAZA", "SANTA CLARA": "PASTAZA", "ARAJUNO": "PASTAZA", "QUITO": "PICHINCHA", "CAYAMBE": "PICHINCHA", "MEJIA": "PICHINCHA", "PEDRO MONCAYO": "PICHINCHA", "RUMINAHUI": "PICHINCHA", "PEDRO VICENTE MALDONADO": "PICHINCHA", "PUERTO QUITO": "PICHINCHA", "SAN MIGUEL DE LOS BANCOS": "PICHINCHA", "SANTO DOMINGO": "SANTO DOMINGO", "SANTO DOMINGO DE LOS TSACHILAS": "SANTO DOMINGO", "SANTA ELENA": "SANTA ELENA", "LA LIBERTAD": "SANTA ELENA", "SALINAS": "SANTA ELENA", "LAGO AGRIO": "SUCUMBIOS", "GONZALO PIZARRO": "SUCUMBIOS", "PUTUMAYO": "SUCUMBIOS", "SHUSHUFINDI": "SUCUMBIOS", "SUCUMBIOS": "SUCUMBIOS", "CASCALES": "SUCUMBIOS", "CUYABENO": "SUCUMBIOS", "AMBATO": "TUNGURAHUA", "BANOS DE AGUA SANTA": "TUNGURAHUA", "CEVALLOS": "TUNGURAHUA", "MOCHA": "TUNGURAHUA", "PATATE": "TUNGURAHUA", "QUERO": "TUNGURAHUA", "SAN PEDRO DE PELILEO": "TUNGURAHUA", "SANTIAGO DE PILLARO": "TUNGURAHUA", "TISALEO": "TUNGURAHUA", "ZAMORA": "ZAMORA CHINCHIPE", "CHINCHIPE": "ZAMORA CHINCHIPE", "NANGARITZA": "ZAMORA CHINCHIPE", "YACUAMBI": "ZAMORA CHINCHIPE", "YANTZAZA": "ZAMORA CHINCHIPE", "EL PANGUI": "ZAMORA CHINCHIPE", "CENTINELA DEL CONDOR": "ZAMORA CHINCHIPE", "PALANDA": "ZAMORA CHINCHIPE", "PAQUISHA": "ZAMORA CHINCHIPE"};
@@ -466,8 +467,8 @@ const LOCALIDAD_PROV={
   "SAN ISIDRO (BAHIA)":"MANABI",
   "BAHIA DE CARAQUEZ":"MANABI"
 };
-function freshDB(){return{version:21,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
-function normalizeDB(x){x=x||freshDB();x.version=21;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
+function freshDB(){return{version:26,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
+function normalizeDB(x){x=x||freshDB();x.version=26;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
 let db=loadDB(),activeOwner='TODOS',daysSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
 const $=id=>document.getElementById(id);
@@ -480,7 +481,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v33.20260907.1';
+const APP_BUILD='v38.20260907.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -498,12 +499,116 @@ const remotePulse={};
 let remotePulseTimer=null;
 
 let syncChannel=null,fsDB=null,firebaseReady=false,cloudApplying=false,cloudSyncTimer=null,cloudSyncRunning=false;
-let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0,lastOrderListenerAt=0,cloudStatusTimer=null;
+let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0,lastOrderListenerAt=0,cloudStatusTimer=null,listenersStarted=false,ordersInitialSnapshot=false;
 let cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
 try{if('BroadcastChannel'in window)syncChannel=new BroadcastChannel(SYNC_CHANNEL_NAME)}catch(e){}
 
-function setCloudStatus(text,state=''){const el=$('cloudStatus');if(!el)return;el.textContent=text;el.style.color=state==='error'?'#ffd5d5':state==='saving'?'#fff2b2':'#fff'}
+function setCloudStatus(text,state=''){
+  const el=$('cloudStatus');if(!el)return;
+  const dot=document.querySelector('.sidebar-bottom .live-dot');
+  if(state==='error'){
+    el.textContent='Firebase desconectado';
+    el.style.color='#ffd5d5';
+    if(dot)dot.style.background='#ff8a8a';
+  }else{
+    el.textContent='Firebase conectado';
+    el.style.color='#fff';
+    if(dot)dot.style.background='#70e6a2';
+  }
+}
+
+function firebaseErrorText(err){
+  const code=String(err?.code||'').replace('firestore/','');
+  const msg=String(err?.message||'').replace(/\s+/g,' ').trim();
+  if(code.includes('permission-denied'))return 'PERMISO DENEGADO';
+  if(code.includes('unavailable'))return 'SIN CONEXIÓN';
+  if(code.includes('failed-precondition'))return 'CONFIGURACIÓN';
+  if(code.includes('deadline-exceeded'))return 'TIEMPO AGOTADO';
+  return (code||msg.slice(0,48)||'ERROR FIREBASE').toUpperCase();
+}
+
 function localCache(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(db))}catch(e){}}
+
+function saveSafetyBackup(source,label='auto'){
+  try{
+    const x=normalizeDB(JSON.parse(JSON.stringify(source||db)));
+    if(!meaningfulLocal(x))return false;
+    const payload={savedAt:new Date().toISOString(),label,db:x};
+    localStorage.setItem(SAFETY_BACKUP_KEY,JSON.stringify(payload));
+    return true;
+  }catch(e){console.warn('Safety backup',e);return false}
+}
+function loadSafetyBackup(){
+  try{
+    const x=JSON.parse(localStorage.getItem(SAFETY_BACKUP_KEY)||'null');
+    return x&&x.db?{...x,db:normalizeDB(x.db)}:null;
+  }catch(e){return null}
+}
+function unionCloudWithLocal(cloud,local){
+  cloud=normalizeDB(cloud);local=normalizeDB(local);
+  const merged=normalizeDB(JSON.parse(JSON.stringify(cloud)));
+
+  // Config: cloud is authoritative if present, otherwise preserve local.
+  if(!Array.isArray(merged.owners)||!merged.owners.length)merged.owners=local.owners;
+  if(!Array.isArray(merged.zones)||!merged.zones.length)merged.zones=local.zones;
+  if(!Array.isArray(merged.claims)||!merged.claims.length)merged.claims=local.claims;
+  if(!merged.settings||!Object.keys(merged.settings).length)merged.settings=local.settings;
+
+  const closedMonths=new Set(Object.keys(merged.snapshots||{}));
+  const recoveredOrders=[];
+  for(const [guia,o] of Object.entries(local.orders||{})){
+    if(merged.orders[guia])continue; // Existing Firebase document always wins.
+    const mk=monthKey(o.fechaGuia);
+    if(mk&&closedMonths.has(mk))continue; // Do not reopen a closed month.
+    merged.orders[guia]=JSON.parse(JSON.stringify(o));
+    recoveredOrders.push(guia);
+  }
+
+  const recoveredContacts=[],recoveredTc=[],recoveredServi=[],recoveredGuidePhones=[],recoveredSnapshots=[];
+  for(const [k,v] of Object.entries(local.contacts||{})){
+    if(!merged.contacts[k]){merged.contacts[k]=JSON.parse(JSON.stringify(v));recoveredContacts.push(k)}
+  }
+  for(const [k,v] of Object.entries(local.sources?.tc||{})){
+    if(!merged.sources.tc[k]){merged.sources.tc[k]=JSON.parse(JSON.stringify(v));recoveredTc.push(k)}
+  }
+  for(const [k,v] of Object.entries(local.sources?.servi||{})){
+    if(!merged.sources.servi[k]){merged.sources.servi[k]=JSON.parse(JSON.stringify(v));recoveredServi.push(k)}
+  }
+  for(const [k,v] of Object.entries(local.sources?.guidePhones||{})){
+    if(!merged.sources.guidePhones[k]){merged.sources.guidePhones[k]=JSON.parse(JSON.stringify(v));recoveredGuidePhones.push(k)}
+  }
+  for(const [k,v] of Object.entries(local.snapshots||{})){
+    if(!merged.snapshots[k]){merged.snapshots[k]=JSON.parse(JSON.stringify(v));recoveredSnapshots.push(k)}
+  }
+
+  return{
+    db:merged,
+    recoveredOrders,recoveredContacts,recoveredTc,recoveredServi,
+    recoveredGuidePhones,recoveredSnapshots
+  };
+}
+async function restoreMissingLocalToFirebase(recovery){
+  if(!firebaseReady||!recovery)return false;
+  const total=(recovery.recoveredOrders?.length||0)+(recovery.recoveredContacts?.length||0)+
+    (recovery.recoveredTc?.length||0)+(recovery.recoveredServi?.length||0)+
+    (recovery.recoveredGuidePhones?.length||0)+(recovery.recoveredSnapshots?.length||0);
+  if(!total)return true;
+
+  setCloudStatus(`Firebase: recuperando ${recovery.recoveredOrders.length} pedidos...`,'saving');
+  const ok=await syncExplicitBulkNow('recovery',{
+    orderGuides:recovery.recoveredOrders,
+    tcGuides:recovery.recoveredTc,
+    serviGuides:recovery.recoveredServi,
+    contactSocios:recovery.recoveredContacts,
+    guidePhoneGuides:recovery.recoveredGuidePhones,
+    snapshotKeys:recovery.recoveredSnapshots
+  });
+  if(ok){
+    toast(`Recuperados ${recovery.recoveredOrders.length} pedidos que faltaban en Firebase`);
+  }
+  return ok;
+}
+
 
 async function publishSyncSignal(kind,guide='',count=1,orderSyncAt=0){
   if(!firebaseReady||!fsDB)return;
@@ -611,7 +716,23 @@ function processSyncSignal(signal){
   lastSyncNonce=signal.nonce;
   if(signal.kind==='order'&&signal.guide){
     const guide=String(signal.guide),wanted=Number(signal.orderSyncAt||0);
-    // Respaldo: damos tiempo al onSnapshot directo. Solo releemos si no llegó.
+    $('restoreSafetyBackup')?.addEventListener('click',async()=>{
+  const b=loadSafetyBackup();
+  if(!b||!meaningfulLocal(b.db))return alert('No existe una copia local de seguridad disponible en esta computadora.');
+  const count=Object.keys(b.db.orders||{}).length;
+  if(!confirm(`Se encontró una copia local con ${count} pedidos, guardada ${b.savedAt||''}. ¿Recuperarla y combinarla con Firebase?`))return;
+  try{
+    const currentCloud=normalizeDB(JSON.parse(JSON.stringify(db)));
+    const recovery=unionCloudWithLocal(currentCloud,b.db);
+    db=recovery.db;
+    localCache();
+    renderAll();
+    await restoreMissingLocalToFirebase(recovery);
+    toast('Copia local recuperada sin borrar Firebase');
+  }catch(err){alert(err.message||err)}
+});
+
+// Respaldo: damos tiempo al onSnapshot directo. Solo releemos si no llegó.
     setTimeout(()=>{
       const current=Number(db.orders[guide]?._syncAt||0);
       if(!wanted||current<wanted)fetchOrderFromServer(guide);
@@ -750,7 +871,7 @@ async function syncConfigOnly(){
     cloudFP.config=s;
   }catch(err){if(!handleWriteError(err,'Config sync'))console.error('Config sync',err)}
 }
-function configPayload(){return cleanCloudValue({version:21,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
+function configPayload(){return cleanCloudValue({version:26,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
 function mapPayload(group,key,val){
   const out=cleanCloudValue(val);
   if(group==='orders'&&!out.guia)out.guia=key;
@@ -817,6 +938,46 @@ async function syncDBToCloud(){
     }
   }finally{cloudSyncRunning=false}
 }
+
+async function withTimeout(promise,ms,label='operación'){
+  let timer;
+  try{
+    return await Promise.race([
+      promise,
+      new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Timeout: '+label)),ms)})
+    ]);
+  }finally{clearTimeout(timer)}
+}
+async function readCollectionFast(collection,group){
+  try{
+    // Default Firestore read can use cache immediately and then server.
+    const snap=await withTimeout(fsDB.collection(collection).get(),7000,collection),map={};
+    snap.forEach(doc=>{
+      const raw=doc.data()||{},d=stripWriteGuard(raw);
+      if(d._deleted)return;
+      const key=String(d.guia||d.socio||d.month||decodeURIComponent(doc.id));
+      map[key]=d;
+      cloudFP[group][key]=stableJSON(mapPayload(group,key,d));
+    });
+    return map;
+  }catch(err){
+    console.warn('Lectura rápida falló',collection,err);
+    try{
+      const snap=await fsDB.collection(collection).get({source:'cache'}),map={};
+      snap.forEach(doc=>{
+        const raw=doc.data()||{},d=stripWriteGuard(raw);
+        if(d._deleted)return;
+        const key=String(d.guia||d.socio||d.month||decodeURIComponent(doc.id));
+        map[key]=d;
+        cloudFP[group][key]=stableJSON(mapPayload(group,key,d));
+      });
+      return map;
+    }catch(e){
+      return {};
+    }
+  }
+}
+
 async function readCollection(collection,group){
   const snap=await fsDB.collection(collection).get({source:'server'}),map={};
   snap.forEach(doc=>{const raw=doc.data()||{},d=stripWriteGuard(raw);if(d._deleted)return;const key=String(d.guia||d.socio||d.month||decodeURIComponent(doc.id));map[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d))});
@@ -844,111 +1005,135 @@ function targetMapFor(group){
   return null;
 }
 function setupCloudListeners(){
-  fsDB.collection(FB.config).doc('principal').onSnapshot(doc=>{
-    if(!doc.exists)return;
-    const d=stripWriteGuard(doc.data()||{});if(d._deleted)return;cloudFP.config=stableJSON(d);
-    cloudApplying=true;applyConfigDoc(d);cloudApplying=false;
-    if(activePageId()==='config')renderConfig();
-  },err=>{console.error('Config listener',err);setCloudStatus('Firebase: listener config falló','error')});
+  if(listenersStarted||!fsDB)return;
+  listenersStarted=true;
 
-  const listenMap=(collection,group)=>{
-    fsDB.collection(collection).onSnapshot(snap=>{
-      const target=targetMapFor(group);if(!target)return;
-      cloudApplying=true;
-      let remoteOrderChanged=false,remoteFields=new Set(),remoteGuide='';
-      for(const ch of snap.docChanges()){
-        const raw=ch.doc.data()||{},d=stripWriteGuard(raw),key=String(d.guia||d.socio||d.month||decodeURIComponent(ch.doc.id));
-        if(ch.type==='removed'||d._deleted){
-          delete target[key];delete cloudFP[group][key];
-          if(group==='orders'){remoteOrderChanged=true;remoteFields.add('__removed__');remoteGuide=key}
-        }else{
-          const prev=target[key]||{},fields=changedFields(prev,d);
-          target[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d));
-          if(group==='orders'){
-            lastOrderListenerAt=Date.now();
-            const isRemote=d._syncClient!==CLIENT_ID;
-            if(isRemote&&fields.length){
-              remoteOrderChanged=true;remoteGuide=key;
-              fields.forEach(f=>remoteFields.add(f));
-            }
-          }
-        }
-      }
+  fsDB.collection(FB.config).doc('principal').onSnapshot({includeMetadataChanges:true},doc=>{
+    if(!doc.exists)return;
+    const d=stripWriteGuard(doc.data()||{});if(d._deleted)return;
+    cloudFP.config=stableJSON(d);
+    cloudApplying=true;applyConfigDoc(d);cloudApplying=false;
+    localCache();
+    if(activePageId()==='config')renderConfig();
+  },err=>{
+    console.error('Config listener',err);
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+  });
+
+  // ORDERS is the primary live source. First snapshot renders the whole table.
+  fsDB.collection(FB.orders).onSnapshot({includeMetadataChanges:true},snap=>{
+    try{
+      lastOrderListenerAt=Date.now();
+      const before=db.orders||{};
+      const next={...before};
+
+      // Apply every server/cache document. Existing cloud guide wins.
+      snap.forEach(doc=>{
+        const raw=doc.data()||{},d=stripWriteGuard(raw);
+        const key=String(d.guia||decodeURIComponent(doc.id));
+        if(d._deleted){delete next[key];delete cloudFP.orders[key];return}
+        next[key]=d;
+        cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+      });
+
+      db.orders=next;
       cloudApplying=false;
       localCache();
-      if(group==='orders'&&remoteOrderChanged){
-        refreshActiveForOrderChange(remoteGuide,[...remoteFields],true);
-        setCloudStatus('Firebase: actualizado ahora · '+liveTime());
-      }else if(group!=='orders'&&snap.docChanges().length){
-        // Config/contactos/fuentes: solo refrescar la vista si realmente la usa.
+
+      if(!ordersInitialSnapshot){
+        ordersInitialSnapshot=true;
+        renderAll();
+      }else{
         const p=activePageId();
-        if(group==='contacts'&&(p==='pedidos'||p==='infobip'))scheduleCloudRender();
+        if(p==='pedidos')renderOrders();
+        else if(p==='infobip')renderInfo();
+        else if(p==='dashboard')renderDashboard();
+      }
+
+      const n=Object.keys(db.orders||{}).length;
+      if(snap.metadata.fromCache){
+        setCloudStatus(`Firebase: caché · ${n} pedidos`);
+      }else{
+        setCloudStatus(`Firebase: EN VIVO · ${n} pedidos`);
+        sessionStorage.removeItem('servi_version_reload_tried');
+      }
+    }catch(err){
+      console.error('Orders snapshot render',err);
+      setCloudStatus('Firebase: error de pantalla','error');
+    }
+  },err=>{
+    console.error('Orders listener',err);
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    toast('Firebase no pudo leer pedidos: '+firebaseErrorText(err));
+  });
+
+  const listenAux=(collection,group)=>{
+    fsDB.collection(collection).onSnapshot({includeMetadataChanges:true},snap=>{
+      const target=targetMapFor(group);if(!target)return;
+      let changed=false;
+      for(const ch of snap.docChanges()){
+        const raw=ch.doc.data()||{},d=stripWriteGuard(raw);
+        const key=String(d.guia||d.socio||d.month||decodeURIComponent(ch.doc.id));
+        if(ch.type==='removed'||d._deleted){
+          if(target[key]!==undefined){delete target[key];delete cloudFP[group][key];changed=true}
+        }else{
+          target[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d));changed=true;
+        }
+      }
+      if(changed){
+        localCache();
+        const p=activePageId();
+        if(group==='contacts'&&p==='infobip')renderInfo();
         else if(group==='snapshots'&&p==='dashboard')renderDashboard();
       }
-    },err=>{console.error(group+' listener',err);setCloudStatus('Firebase: conexión interrumpida','error')});
+    },err=>console.error(group+' listener',err));
   };
 
-  listenMap(FB.orders,'orders');
-  listenMap(FB.contacts,'contacts');
-  listenMap(FB.tc,'tc');
-  listenMap(FB.servi,'servi');
-  listenMap(FB.guidePhones,'guidePhones');
-  listenMap(FB.snapshots,'snapshots');
+  listenAux(FB.contacts,'contacts');
+  listenAux(FB.tc,'tc');
+  listenAux(FB.servi,'servi');
+  listenAux(FB.guidePhones,'guidePhones');
+  listenAux(FB.snapshots,'snapshots');
 
   if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){}
-  syncSignalUnsub=fsDB.collection(FB.sync).doc('state').onSnapshot(doc=>{
-    if(doc.exists)processSyncSignal(stripWriteGuard(doc.data()||{}));
+  syncSignalUnsub=fsDB.collection(FB.sync).doc('state').onSnapshot({includeMetadataChanges:true},doc=>{
+    if(doc.exists&&!doc.metadata.fromCache)processSyncSignal(stripWriteGuard(doc.data()||{}));
   },err=>console.error('Sync signal listener',err));
 }
 async function initFirebase(){
   try{
-    setCloudStatus('Firebase: conectando...');
-    const localBefore=normalizeDB(db);
-    if(!window.firebase)throw new Error('No cargó Firebase SDK');
-    if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
-    fsDB=firebase.firestore();
-    fsDB.settings({ignoreUndefinedProperties:true});
-    const cfgRef=fsDB.collection(FB.config).doc('principal');
-    const cfgDoc=await cfgRef.get({source:'server'});
-    firebaseReady=true;
-    if(!cfgDoc.exists){
-      // First Servientrega run in this Firebase project: migrate this browser's current data.
-      db=localBefore;
-      await uploadInitialState();
-      if(meaningfulLocal(localBefore))toast('Datos existentes migrados a Firebase');
-    }else{
-      const cloud=freshDB();
-      const [orders,contacts,tc,servi,guidePhones,snapshots]=await Promise.all([
-        readCollection(FB.orders,'orders'),readCollection(FB.contacts,'contacts'),
-        readCollection(FB.tc,'tc'),readCollection(FB.servi,'servi'),
-        readCollection(FB.guidePhones,'guidePhones'),readCollection(FB.snapshots,'snapshots')
-      ]);
-      const cfg=stripWriteGuard(cfgDoc.data()||{});
-      cloud.owners=cfg.owners||cloud.owners;cloud.zones=cfg.zones||cloud.zones;cloud.claims=cfg.claims||cloud.claims;cloud.settings=cfg.settings||cloud.settings;
-      cloud.orders=orders;cloud.contacts=contacts;cloud.sources={tc,servi,guidePhones};cloud.snapshots=snapshots;
-      const cloudHasData=meaningfulLocal(cloud);
-      if(!cloudHasData&&meaningfulLocal(localBefore)){
-        // Protect against an empty Firebase configuration having been created from another PC first.
-        db=localBefore;
-        await uploadInitialState();
-        toast('Datos locales migrados a Firebase');
-      }else{
-        db=normalizeDB(cloud);
-        cloudFP.config=stableJSON(cfg);
-        localCache();
-      }
-    }
-    reconcileAll(false);
-    localCache();
+    // Always show current browser data immediately.
     renderAll();
+    const localCount=Object.keys(db.orders||{}).length;
+    setCloudStatus(localCount?`Firebase: conectando · ${localCount} locales`:'Firebase: conectando...');
+
+    saveSafetyBackup(db,'antes_de_firebase_v36');
+
+    if(!window.firebase)throw new Error('Firebase SDK no cargó');
+    if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
+
+    fsDB=firebase.firestore();
+    firebaseReady=true;
+
+    // Important: no fsDB.settings() and no blocking get() calls.
+    // The real-time listener is the only startup path.
     setupCloudListeners();
-    sessionStorage.removeItem('servi_version_reload_tried');
-    setCloudStatus('Firebase: EN VIVO · '+liveTime());
+
+    // Ask Firestore to enable its network, but don't block rendering.
+    try{await fsDB.enableNetwork()}catch(e){console.warn('enableNetwork',e)}
+
+    // If there is still no snapshot after 8 s, expose the state but keep listening.
+    setTimeout(()=>{
+      if(!ordersInitialSnapshot&&firebaseReady){
+        setCloudStatus('Firebase: esperando respuesta del servidor...','saving');
+      }
+    },8000);
+
   }catch(err){
     console.error('Firebase init',err);
     firebaseReady=false;
-    setCloudStatus('Firebase: modo local','error');
-    toast('Firebase no conectó; trabajando con copia local');
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    toast('Error Firebase: '+firebaseErrorText(err));
     renderAll();
   }
 }
@@ -1172,6 +1357,85 @@ function processTcRows(rows){
   localCache();
   return{guideMatches,unchanged,masterAdded,masterUpdated,recovered,serviRows,stored,changedGuides:[...changedGuides],sourceGuides:[...sourceGuides],contactSocios:[...touchedSocios],guidePhoneGuides:[...guidePhoneGuides]};
 }
+
+function openMonths(){
+  return [...new Set(
+    Object.values(db.orders||{}).map(o=>monthKey(o.fechaGuia)).filter(Boolean)
+  )].sort().reverse();
+}
+
+function dashboardMonths(){
+  return [...new Set([
+    ...openMonths(),
+    ...Object.keys(db.snapshots||{})
+  ])].sort().reverse();
+}
+
+function ensureMonthSelects(){
+  const open=openMonths(),dash=dashboardMonths();
+  const p=$('pMonth'),i=$('iMonth'),d=$('dMonth');
+  if(!p||!i||!d)return;
+
+  const pOld=p.value,iOld=i.value,dOld=d.value;
+
+  p.innerHTML=open.length
+    ?open.map(m=>`<option value="${m}">${monthName(m)}</option>`).join('')
+    :'<option value="">Sin datos</option>';
+
+  i.innerHTML=open.length
+    ?open.map(m=>`<option value="${m}">${monthName(m)}</option>`).join('')
+    :'<option value="">Sin datos</option>';
+
+  d.innerHTML=dash.length
+    ?dash.map(m=>`<option value="${m}">${monthName(m)}${db.snapshots[m]?' · CERRADO':''}</option>`).join('')
+    :'<option value="">Sin datos</option>';
+
+  if(open.includes(pOld))p.value=pOld;
+  if(open.includes(iOld))i.value=iOld;
+  if(dash.includes(dOld))d.value=dOld;
+}
+
+function ensureServiStatusOptions(){
+  const el=$('pServiStatus');if(!el)return;
+  const old=el.value,m=$('pMonth')?.value||'';
+  const statuses=[...new Set(
+    Object.values(db.orders||{})
+      .filter(o=>!m||monthKey(o.fechaGuia)===m)
+      .map(o=>String(o.status||'').trim())
+      .filter(Boolean)
+  )].sort((a,b)=>a.localeCompare(b,'es'));
+
+  el.innerHTML=
+    '<option value="">Todos</option>'+
+    '<option value="__EMPTY__">Sin status</option>'+
+    statuses.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+
+  if([...el.options].some(o=>o.value===old))el.value=old;
+}
+
+function ownerCountRows(){
+  const m=$('pMonth')?.value||'',
+        d=$('pDate')?.value||'',
+        c=$('pChannel')?.value||'',
+        s=$('pStatus')?.value||'',
+        ss=$('pServiStatus')?.value||'',
+        cl=$('pClaim')?.value||'',
+        q=N($('pSearch')?.value||'');
+
+  return Object.values(db.orders||{}).filter(o=>
+    (!m||monthKey(o.fechaGuia)===m)&&
+    (!d||o.fechaGuia===d)&&
+    (!c||o.canal===c)&&
+    (!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&
+    (!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&
+    (!cl||o.clasificacion===cl)&&
+    (!q||N([
+      o.guia,o.socio,o.nombreSocio,o.destinatario,
+      o.ciudad,o.status,o.referencia
+    ].join(' ')).includes(q))
+  );
+}
+
 function renderOwnerTabs(){const own=db.owners.filter(o=>o.active).map(o=>o.name),UN='SIN ASIGNACIÓN';if(activeOwner!=='TODOS'&&activeOwner!==UN&&!own.includes(activeOwner))activeOwner='TODOS';const base=ownerCountRows(),counts={TODOS:base.length};own.forEach(name=>counts[name]=base.filter(o=>o.responsable===name).length);counts[UN]=base.filter(o=>!String(o.responsable||'').trim()).length;$('ownerTabs').innerHTML=['TODOS',...own,UN].map(o=>`<button class="${o===activeOwner?'active':''} ${o===UN&&counts[UN]?'unassigned-tab':''}" data-owner="${escapeHtml(o)}">${escapeHtml(o)}<span class="owner-count">${counts[o]||0}</span></button>`).join('')}
 function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(daysSort){const getD=o=>isDelivered(o)?workdaysDiff(o.fechaGuia,o.fechaEntrega):null;rows.sort((a,b)=>{const da=getD(a),dbb=getD(b);if(da==null&&dbb==null)return String(a.guia).localeCompare(String(b.guia));if(da==null)return 1;if(dbb==null)return-1;const diff=daysSort==='desc'?dbb-da:da-dbb;return diff||String(a.guia).localeCompare(String(b.guia))})}return rows}
 function claimOptions(selected=''){return'<option value=""></option>'+db.claims.map(c=>`<option value="${escapeHtml(c.name)}" ${c.name===selected?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
@@ -1323,9 +1587,12 @@ $('gestionModal').addEventListener('click',e=>{if(e.target===$('gestionModal'))$
 $('gestionText').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')$('saveGestion').click()});
 
 // Cargas
-$('processNormal').addEventListener('click',async()=>{const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal');btn.disabled=true;try{const r=processNormalRows(rows);renderAll();const ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtNormal').value=''}finally{btn.disabled=false}});
-$('processServi').addEventListener('click',async()=>{const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processServi');btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processServiRows(rows);renderAll();const ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides});showResult('resServi',`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtServi').value=''}finally{btn.disabled=false;btn.textContent='Actualizar status'}});
-$('processTc').addEventListener('click',async()=>{const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processTc');btn.disabled=true;try{const r=processTcRows(rows);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtTc').value=''}finally{btn.disabled=false}});
+$('processNormal').addEventListener('click',async()=>{
+  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal');btn.disabled=true;try{const r=processNormalRows(rows);renderAll();const ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtNormal').value=''}finally{btn.disabled=false}});
+$('processServi').addEventListener('click',async()=>{
+  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processServi');btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processServiRows(rows);renderAll();const ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides});showResult('resServi',`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtServi').value=''}finally{btn.disabled=false;btn.textContent='Actualizar status'}});
+$('processTc').addEventListener('click',async()=>{
+  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processTc');btn.disabled=true;try{const r=processTcRows(rows);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtTc').value=''}finally{btn.disabled=false}});
 async function processFile(inputId,type,resultId){try{const rows=await rowsFromFile($(inputId));let r,ok=false;if(type==='normal'){r=processNormalRows(rows);renderAll();ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides})}if(type==='servi'){r=processServiRows(rows);renderAll();ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides})}if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`)}catch(e){alert(e.message||e)}}
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
 // INFOBIP
@@ -1356,7 +1623,7 @@ $('holidaysList').addEventListener('click',e=>{const b=e.target.closest('[data-h
 $('savePupRule').addEventListener('click',()=>{const days=Math.max(0,Number($('pupDaysConfig').value||0));db.settings=db.settings||{holidays:[],pupDays:1};db.settings.pupDays=days;saveDB();renderAll();toast(`Regla PUP guardada: +${days} día/s`)});
 
 // Respaldo
-$('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};await syncDBToCloud();await publishSyncSignal('backup-bulk','',Object.keys(db.orders).length,Date.now());renderAll();toast('Respaldo importado y sincronizado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;const deleted=Object.keys(db.orders);db.orders={};saveDB();syncExplicitBulkNow('clear-orders',{deleteOrderGuides:deleted});renderAll();toast('Pedidos abiertos eliminados')});
+$('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};await syncDBToCloud();await publishSyncSignal('backup-bulk','',Object.keys(db.orders).length,Date.now());renderAll();toast('Respaldo importado y sincronizado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{saveSafetyBackup(db,'antes_de_borrar_pedidos');if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;const deleted=Object.keys(db.orders);db.orders={};saveDB();syncExplicitBulkNow('clear-orders',{deleteOrderGuides:deleted});renderAll();toast('Pedidos abiertos eliminados')});
 $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none');$('socioModal').addEventListener('click',e=>{if(e.target===$('socioModal'))$('socioModal').style.display='none'});
 
 let buildCheckRunning=false;
@@ -1381,7 +1648,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v33 · ESCRITURA PROTEGIDA';
+      const bs=$('buildStatus');if(bs)bs.textContent='v38';
     }
   }catch(e){
     console.warn('Build check',e);
@@ -1396,7 +1663,7 @@ setInterval(checkPublishedBuild,10000);
 
 renderAll();
 window.addEventListener('pageshow',()=>{checkPublishedBuild();checkSyncStateFromServer()});
-window.addEventListener('online',()=>{try{fsDB?.enableNetwork?.()}catch(e){};checkPublishedBuild();checkSyncStateFromServer()});
+window.addEventListener('online',()=>{try{fsDB?.enableNetwork?.()}catch(e){};if(!fsDB)initFirebase();checkPublishedBuild();checkSyncStateFromServer()});
 window.addEventListener('focus',()=>{checkPublishedBuild();checkSyncStateFromServer()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){checkPublishedBuild();checkSyncStateFromServer()}});
 initFirebase();
