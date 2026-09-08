@@ -163,7 +163,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v47</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v49</span></div>
 </aside>
 
 <main class="main">
@@ -541,7 +541,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v47.20260908.1';
+const APP_BUILD='v49.20260908.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1170,7 +1170,7 @@ async function getCloudDocsByKeys(collection,keys,keyField='guia'){
   const out={};
   if(!firebaseReady||!fsDB||!list.length)return out;
   const field=firebase.firestore.FieldPath.documentId();
-  // v47: consultas por lotes. Una base Oriflame de miles de guías ya NO hace 3-4 GET por guía.
+  // v49: consultas por lotes. Una base Oriflame de miles de guías ya NO hace 3-4 GET por guía.
   // En Firestore moderno el operador IN admite hasta 30 valores; si una red/SDK devuelve
   // invalid-argument, repetimos ese lote en bloques de 10 por compatibilidad.
   async function fetchChunk(chunk){
@@ -1204,7 +1204,7 @@ async function getCloudDocsByKeys(collection,keys,keyField='guia'){
 }
 
 async function hydrateGuidesFromCloudSources(guides){
-  // v47: cruce auxiliar MASIVO y liviano. Solo se usa para guías NUEVAS y solo busca
+  // v49: cruce auxiliar MASIVO y liviano. Solo se usa para guías NUEVAS y solo busca
   // fuentes que no estén ya en el localStorage de esta misma PC.
   const list=[...new Set((guides||[]).map(String).filter(Boolean))].filter(g=>db.orders?.[g]&&!db.orders[g]._testSync);
   if(!firebaseReady||!list.length)return [];
@@ -1330,7 +1330,7 @@ async function initFirebase(){
     firebaseServerLive=false;
     setCloudStatus('Firebase: conectando');
 
-    saveSafetyBackup(db,'antes_de_firebase_v47');
+    saveSafetyBackup(db,'antes_de_firebase_v48');
 
     if(!window.firebase)throw new Error('Firebase SDK no cargó');
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -1409,7 +1409,9 @@ function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;',
 function cleanPhone(v){let d=String(v??'').replace(/\D/g,'');if(!d)return'';if(d.startsWith('593')&&d.length>=12)d='0'+d.slice(-9);else if(d.length===9&&d.startsWith('9'))d='0'+d;else if(d.length>10&&d.endsWith(d.slice(-10)))d=d.slice(-10);return d}
 function excelSerialToDate(n){if(!window.XLSX||typeof n!=='number')return null;const o=XLSX.SSF.parse_date_code(n);return o?new Date(o.y,o.m-1,o.d):null}
 function parseAnyDate(v){if(v==null||v==='')return null;if(v instanceof Date&&!isNaN(v))return v;if(typeof v==='number'){const d=excelSerialToDate(v);if(d)return d}const s=String(v).trim();if(!s)return null;if(/^\d{2}[\/\.\-]\d{2}[\/\.\-]\d{4}$/.test(s)){const p=s.split(/[\/\.\-]/).map(Number);return new Date(p[2],p[1]-1,p[0])}if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}const d=new Date(s);return isNaN(d)?null:d}
-function parseOriflameDate(v){
+function oriflameRawDate(r){return getObjValue(r,['FECHA GUIA','FECHA_GUIA','AWB_DATE','ENTRY_DATE'])}
+function dateFromParts(y,m,d){const x=new Date(y,m-1,d);return x.getFullYear()===y&&x.getMonth()===m-1&&x.getDate()===d?x:null}
+function parseOriflameDate(v,mode='AUTO'){
   if(v==null||v==='')return null;
   if(v instanceof Date&&!isNaN(v))return v;
   if(typeof v==='number'){const d=excelSerialToDate(v);if(d)return d}
@@ -1417,16 +1419,38 @@ function parseOriflameDate(v){
   const m=s.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})$/);
   if(m){
     const a=Number(m[1]),b=Number(m[2]),y=Number(m[3]);
-    // Base Oriflame copiada desde el reporte: MM/DD/YYYY.
-    // Si el primer valor no puede ser mes (>12), aceptamos DD/MM/YYYY como respaldo.
-    const month=a>12?b:a, day=a>12?a:b;
-    const d=new Date(y,month-1,day);
-    if(d.getFullYear()===y&&d.getMonth()===month-1&&d.getDate()===day)return d;
-    return null;
+    if(a>12&&b<=12)return dateFromParts(y,b,a);       // DD/MM inequívoco
+    if(b>12&&a<=12)return dateFromParts(y,a,b);       // MM/DD inequívoco
+    if(mode==='DMY')return dateFromParts(y,b,a);
+    if(mode==='MDY')return dateFromParts(y,a,b);
+    // Ambiguo: elegimos la interpretación más cercana a hoy, evitando fechas futuras lejanas.
+    const dmy=dateFromParts(y,b,a),mdy=dateFromParts(y,a,b),now=new Date();
+    const score=d=>{if(!d)return 1e15;const days=Math.abs((d-now)/86400000);const future=(d-now)/86400000;return days+(future>7?future*8:0)};
+    return score(dmy)<=score(mdy)?dmy:mdy;
   }
   return parseAnyDate(v);
 }
-function isoOriflameDate(v){const d=parseOriflameDate(v);if(!d||d.getFullYear()<2000)return'';return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function detectOriflameDateMode(rows){
+  let dmyEvidence=0,mdyEvidence=0;const ambiguous=[];
+  for(const r of rows||[]){
+    const v=oriflameRawDate(r);if(v==null||v===''||v instanceof Date||typeof v==='number')continue;
+    const m=String(v).trim().match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})$/);if(!m)continue;
+    const a=Number(m[1]),b=Number(m[2]),y=Number(m[3]);
+    if(a>12&&b<=12)dmyEvidence+=10;
+    else if(b>12&&a<=12)mdyEvidence+=10;
+    else if(a>=1&&a<=12&&b>=1&&b<=12)ambiguous.push([a,b,y]);
+  }
+  if(dmyEvidence!==mdyEvidence)return dmyEvidence>mdyEvidence?'DMY':'MDY';
+  if(!ambiguous.length)return'AUTO';
+  const now=new Date();
+  const scoreMode=mode=>ambiguous.reduce((sum,[a,b,y])=>{
+    const d=mode==='DMY'?dateFromParts(y,b,a):dateFromParts(y,a,b);if(!d)return sum+1e9;
+    const delta=(d-now)/86400000,dist=Math.abs(delta);
+    return sum+dist+(delta>7?delta*8:0)+(dist>370?dist*2:0);
+  },0);
+  return scoreMode('DMY')<=scoreMode('MDY')?'DMY':'MDY';
+}
+function isoOriflameDate(v,mode='AUTO'){const d=parseOriflameDate(v,mode);if(!d||d.getFullYear()<2000)return'';return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function isoDate(v){const d=parseAnyDate(v);if(!d)return'';if(d.getFullYear()<2000)return'';return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function displayDate(v){const d=parseAnyDate(v);return d?`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`:''}
 function monthKey(v){const d=parseAnyDate(v);return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:''}
@@ -1460,7 +1484,8 @@ function parseTSV(text){const lines=String(text||'').replace(/\r/g,'').split('\n
 async function rowsFromFile(input){const f=input.files?.[0];if(!f)throw new Error('Selecciona un archivo.');if(!window.XLSX)throw new Error('No se cargó el módulo Excel.');const buf=await f.arrayBuffer();const wb=XLSX.read(buf,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];return XLSX.utils.sheet_to_json(ws,{defval:'',raw:true})}
 function showResult(id,msg){const el=$(id);el.style.display='block';el.innerHTML=msg}
 function processNormalRows(rows){
-  let created=0,updated=0,unchanged=0,skipped=0,nonServi=0,unassigned=0,missingChannel=0;
+  const dateMode=detectOriflameDateMode(rows);
+  let created=0,updated=0,unchanged=0,skipped=0,nonServi=0,unassigned=0,missingChannel=0,dateCorrected=0;
   const changedGuides=[],createdGuides=[],guidePhoneGuides=[];
   for(const r of rows){
     const courier=N(getObjValue(r,['COURIER']));if(courier&&!courier.includes('SERVIENTREGA')){nonServi++;continue}
@@ -1469,13 +1494,13 @@ function processNormalRows(rows){
     const cod=String(getObjValue(r,['COD DISTR.','COD DISTR','COD_DISTR','SERVICE_CENTRE'])||old.codDistr||'').trim();
     const directCell=cleanPhone(getObjValue(r,['CELULAR','CELULAR13','TELEFONO_SOCIO']));
     const o={...old,guia,
-      fechaGuia:isoOriflameDate(getObjValue(r,['FECHA GUIA','FECHA_GUIA','AWB_DATE','ENTRY_DATE'])||old.fechaGuia),codDistr:cod,
+      fechaGuia:isoOriflameDate(oriflameRawDate(r)||old.fechaGuia,dateMode),codDistr:cod,
       destinatario:String(getObjValue(r,['NOMBRE DESTINATARIO','NOMBRE_DESTINATARIO','SERVICE_CENTRE_NAME'])||old.destinatario||'').trim(),
       direccion:String(getObjValue(r,['DIRECCION ENVIO','DIRECCIÓN ENVIO','DIRECCION ENVÍO','DIRECCIÓN ENVÍO','DIRECCION DE ENVIO','DIRECCIÓN DE ENVÍO','DIRECCION_ENVIO','DIRECCION','DIRECCIÓN','DIRECCIÒN','ADDRESS_LINE_1'])||old.direccion||'').trim(),
       barrio:String(getObjValue(r,['BARRIO','ADDRESS_LINE_2'])||old.barrio||'').trim(),telefono1:cleanPhone(getObjValue(r,['TELEFONO 1','TELEFONO_1','TELEFONO'])||old.telefono1),telefono2:cleanPhone(getObjValue(r,['TELEFONO 2','TELEFONO_2'])||old.telefono2),
-      numeroOrden:String(getObjValue(r,['NUMERO DE ORDEN','NUMERO_DE_ORDEN','INVO_NUMBER'])||old.numeroOrden||'').trim(),orderDate:isoOriflameDate(getObjValue(r,['ORDER DATE','ORDER_DATE'])||old.orderDate),
+      numeroOrden:String(getObjValue(r,['NUMERO DE ORDEN','NUMERO_DE_ORDEN','INVO_NUMBER'])||old.numeroOrden||'').trim(),orderDate:isoOriflameDate(getObjValue(r,['ORDER DATE','ORDER_DATE'])||old.orderDate,dateMode),
       ciudad:String(getObjValue(r,['CIUDAD','CITY','ADDRESS_LINE_3'])||old.ciudad||'').trim(),provincia:String(getObjValue(r,['PROVINCIA','CITY_1'])||old.provincia||'').trim(),
-      peso:getObjValue(r,['PESO'])||old.peso||'',bultos:getObjValue(r,['BULTOS'])||old.bultos||'',promesa:isoOriflameDate(getObjValue(r,['PROMESA DE ENTREGA','PROMESA_DE_ENTREGA'])||old.promesa),
+      peso:getObjValue(r,['PESO'])||old.peso||'',bultos:getObjValue(r,['BULTOS'])||old.bultos||'',promesa:isoOriflameDate(getObjValue(r,['PROMESA DE ENTREGA','PROMESA_DE_ENTREGA'])||old.promesa,dateMode),
       socio:String(getObjValue(r,['SOCIO','CODIGO11'])||old.socio||'').trim(),nombreSocio:String(getObjValue(r,['NOMBRE_SOCIO','NOMBRE12'])||old.nombreSocio||'').trim(),referencia:String(getObjValue(r,['REFERENCIAS','REFERENCIA','REFERENCIA23'])||old.referencia||'').trim(),
       celular:directCell||old.celular||'',status:old.status||'',fechaEntrega:old.fechaEntrega||'',clasificacion:old.clasificacion||'',gestion:old.gestion||'',lockedDelivered:!!old.lockedDelivered,manualResponsable:!!old.manualResponsable
     };
@@ -1483,11 +1508,12 @@ function processNormalRows(rows){
     if(directCell){rememberGuidePhone(guia,directCell,'Base Oriflame');guidePhoneGuides.push(guia)}
     o.canal=channel(cod);o.provincia=inferProvince(o);o.responsable=assignOwner(o);reconcileOrder(o);
     if(!o.canal)missingChannel++;if(!o.responsable)unassigned++;
+    if(old.guia&&old.fechaGuia&&o.fechaGuia&&old.fechaGuia!==o.fechaGuia)dateCorrected++;
     if(old.guia){if(sameOrder(old,o)){unchanged++;continue}updated++}else{created++;createdGuides.push(guia)}
     o._syncClient=CLIENT_ID;o._syncAt=Date.now();db.orders[guia]=o;changedGuides.push(guia);
   }
   localCache();
-  return{created,updated,unchanged,skipped,nonServi,unassigned,missingChannel,changedGuides:[...new Set(changedGuides)],createdGuides:[...new Set(createdGuides)],guidePhoneGuides:[...new Set(guidePhoneGuides)]};
+  return{created,updated,unchanged,skipped,nonServi,unassigned,missingChannel,dateCorrected,dateMode,changedGuides:[...new Set(changedGuides)],createdGuides:[...new Set(createdGuides)],guidePhoneGuides:[...new Set(guidePhoneGuides)]};
 }
 function processServiRows(rows){
   let updated=0,unchanged=0,locked=0,notFound=0,empty=0,deliveredNow=0,stored=0;
@@ -1721,7 +1747,7 @@ function ownerCountRows(){
 }
 
 function renderOwnerTabs(){const own=db.owners.filter(o=>o.active).map(o=>o.name),UN='SIN ASIGNACIÓN';if(activeOwner!=='TODOS'&&activeOwner!==UN&&!own.includes(activeOwner))activeOwner='TODOS';const base=ownerCountRows(),counts={TODOS:base.length};own.forEach(name=>counts[name]=base.filter(o=>o.responsable===name).length);counts[UN]=base.filter(o=>!String(o.responsable||'').trim()).length;$('ownerTabs').innerHTML=['TODOS',...own,UN].map(o=>`<button class="${o===activeOwner?'active':''} ${o===UN&&counts[UN]?'unassigned-tab':''}" data-owner="${escapeHtml(o)}">${escapeHtml(o)}<span class="owner-count">${counts[o]||0}</span></button>`).join('')}
-function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(daysSort){const getD=o=>isDelivered(o)?workdaysDiff(o.fechaGuia,o.fechaEntrega):null;rows.sort((a,b)=>{const da=getD(a),dbb=getD(b);if(da==null&&dbb==null)return String(a.guia).localeCompare(String(b.guia));if(da==null)return 1;if(dbb==null)return-1;const diff=daysSort==='desc'?dbb-da:da-dbb;return diff||String(a.guia).localeCompare(String(b.guia))})}return rows}
+function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(daysSort){const getD=o=>isDelivered(o)?workdaysDiff(o.fechaGuia,o.fechaEntrega):null;rows.sort((a,b)=>{const da=getD(a),dbb=getD(b);if(da==null&&dbb==null)return String(a.guia).localeCompare(String(b.guia));if(da==null)return 1;if(dbb==null)return-1;const diff=daysSort==='desc'?dbb-da:da-dbb;return diff||String(a.guia).localeCompare(String(b.guia))})}else{rows.sort((a,b)=>String(b.fechaGuia||'').localeCompare(String(a.fechaGuia||''))||String(b.guia||'').localeCompare(String(a.guia||'')))}return rows}
 function claimOptions(selected=''){return'<option value=""></option>'+db.claims.map(c=>`<option value="${escapeHtml(c.name)}" ${c.name===selected?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
 function syncOrdersHScroll(){const wrap=$('ordersScrollWrap'),bar=$('ordersHScroll'),inner=$('ordersHScrollInner'),table=$('ordersTable');if(!wrap||!bar||!inner||!table)return;requestAnimationFrame(()=>{inner.style.width=Math.max(table.scrollWidth,wrap.clientWidth)+'px';bar.scrollLeft=wrap.scrollLeft});wrap.onscroll=()=>{if(Math.abs(bar.scrollLeft-wrap.scrollLeft)>1)bar.scrollLeft=wrap.scrollLeft};bar.onscroll=()=>{if(Math.abs(wrap.scrollLeft-bar.scrollLeft)>1)wrap.scrollLeft=bar.scrollLeft}}
 function renderOrders(){ensureServiStatusOptions();renderOwnerTabs();const rows=orderRows();const showOwner=activeOwner==='TODOS'||activeOwner==='SIN ASIGNACIÓN';$('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th>FECHA GUIA</th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>GESTIÓN</th><th>FECHA ENTREGA</th><th class="sort-days ${daysSort?'active':''}" data-sort-days title="Ordenar por días">DÍAS <span class="sort-arrow">${daysSort==='desc'?'↓':daysSort==='asc'?'↑':'↕'}</span></th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>`<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatario||o.nombreSocio||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td>${escapeHtml(o.direccion||'')}</td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td>${escapeHtml(displayDate(o.fechaEntrega))}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable" style="width:180px" data-edit="${o.guia}" data-field="clasificacion">${claimOptions(o.clasificacion||'')}</select></td></tr>`).join('')}</tbody>`;syncOrdersHScroll()}
@@ -1875,7 +1901,7 @@ $('processNormal').addEventListener('click',async()=>{
   saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';
   try{
     const r=processNormalRows(rows);
-    // v47: la base aparece INMEDIATAMENTE en esta PC y se envía a Firebase antes de cualquier cruce auxiliar.
+    // v48: la base aparece INMEDIATAMENTE y la fecha Oriflame se autodetecta por cada carga.
     renderAll();
     let ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
     let hydrated=[];
@@ -1883,7 +1909,7 @@ $('processNormal').addEventListener('click',async()=>{
       hydrated=await hydrateGuidesFromCloudSources(r.createdGuides);
       if(hydrated.length){renderAll();ok=await syncExplicitBulkNow('oriflame-cruce',{orderGuides:hydrated})&&ok}
     }
-    showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fecha Oriflame: <b>MM/DD → DD/MM</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase; conserva esta base y reintenta cuando haya cuota</b>'}`);
+    showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fechas corregidas: <b>${r.dateCorrected||0}</b> · Fecha detectada: <b>${r.dateMode==='DMY'?'DD/MM':r.dateMode==='MDY'?'MM/DD':'AUTO'}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase; conserva esta base y reintenta cuando haya cuota</b>'}`);
     if(ok)$('txtNormal').value='';
   }finally{btn.disabled=false;btn.textContent=oldText}
 });
@@ -1901,7 +1927,7 @@ async function processFile(inputId,type,resultId){
     }
     if(type==='servi'){r=processServiRows(rows);renderAll();ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides})}
     if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}
-    showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fecha Oriflame: <b>MM/DD → DD/MM</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`)
+    showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fechas corregidas: <b>${r.dateCorrected||0}</b> · Fecha detectada: <b>${r.dateMode==='DMY'?'DD/MM':r.dateMode==='MDY'?'MM/DD':'AUTO'}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`)
   }catch(e){alert(e.message||e)}
 }
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
@@ -1921,7 +1947,7 @@ $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOB
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
 $('dMonth').addEventListener('change',renderDashboard);$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
-// Laboratorio de sincronización de bases · v47 · lote de 100
+// Laboratorio de sincronización de bases · v48 · lote de 100
 const SYNC_TEST_KEY='servientrega_sync_test_v44';
 const SYNC_TEST_COUNT=100;
 function loadSyncTest(){try{return JSON.parse(localStorage.getItem(SYNC_TEST_KEY)||'null')}catch(e){return null}}
@@ -2170,7 +2196,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v47';
+      const bs=$('buildStatus');if(bs)bs.textContent='v49';
     }
   }catch(e){
     console.warn('Build check',e);
