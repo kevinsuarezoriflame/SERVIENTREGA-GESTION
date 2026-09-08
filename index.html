@@ -350,7 +350,8 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     </div>
     <div class="panel config-card full">
       <h3>Maestro de Contactos</h3>
-      <div class="contact-tools"><input id="contactSearch" placeholder="Buscar socio o celular"></div>
+      <div class="contact-tools"><input id="contactSearch" placeholder="Buscar socio o celular"><button class="btn btn-outline" id="loadContactsCloud">Cargar maestro Firebase</button></div>
+      <div class="rule-note" style="margin-bottom:8px">Para ahorrar lecturas, Configuración no descarga automáticamente todo el maestro. Usa “Cargar maestro Firebase” solo cuando necesites revisar contactos históricos.</div>
       <div class="listbox" id="contactsList"></div>
       <div class="addrow"><input id="newSocio" placeholder="Código socio"><input id="newPhone" placeholder="Celular"><button class="btn btn-green" id="addContact">Agregar / actualizar</button></div>
     </div>
@@ -388,6 +389,28 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
         <div class="listrow" style="grid-template-columns:1fr 1fr"><strong>5+ dígitos</strong><span>HD</span></div>
       </div>
     </div>
+    <details class="panel config-card full" id="syncTestPanel" style="padding:0;overflow:hidden">
+      <summary style="cursor:pointer;padding:16px 18px;font-weight:800;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span>🧪 Prueba masiva de sincronización · 100 guías</span>
+        <span style="font-size:10px;color:#6D7A75;font-weight:600">Solo Configuración · aislada de pedidos reales</span>
+      </summary>
+      <div style="padding:0 18px 18px">
+        <div class="rule-note" style="margin-bottom:10px">
+          Genera <b>100 guías ficticias TESTSYNC</b>. Copia y procesa Base Oriflame, Base Servientrega y Total Control para comprobar el aumento y los cambios en otra PC <b>sin F5</b>. La prueba está optimizada para escribir solo documentos que cambian y no fuerza relecturas completas. Al finalizar, <b>Limpiar las 100 pruebas</b> las retira mediante baja lógica; no borra pedidos reales.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <button class="btn btn-green" id="syncTestCreate">Generar lote de 100</button>
+          <button class="btn" id="copyTestNormal" disabled>Copiar Base Oriflame · 100</button>
+          <button class="btn" id="copyTestServi" disabled>Copiar Base Servientrega · 100</button>
+          <button class="btn" id="copyTestTc" disabled>Copiar Total Control · 100</button>
+          <button class="btn btn-danger" id="syncTestCleanup" disabled>Limpiar las 100 pruebas</button>
+        </div>
+        <div id="syncTestInfo" style="border:1px solid #D7E7E1;border-radius:9px;padding:10px 12px;background:#FAFCFB;font-size:11px;color:#43544D">
+          No hay una prueba preparada en esta PC.
+        </div>
+      </div>
+    </details>
+
     <div class="panel config-card full">
       <h3>Datos locales</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="exportBackup">Exportar respaldo</button><label class="btn" for="importBackup">Importar respaldo</label><input id="importBackup" type="file" accept=".json" style="display:none"><button class="btn btn-outline" id="restoreSafetyBackup">Recuperar copia local</button><button class="btn btn-danger" id="clearOrders">Borrar pedidos abiertos</button></div>
@@ -481,7 +504,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v41.20260907.2';
+const APP_BUILD='v43.20260908.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1101,7 +1124,8 @@ async function hydrateGuideFromCloudSources(guia){
 }
 
 async function hydrateGuidesFromCloudSources(guides){
-  const list=[...new Set((guides||[]).map(String).filter(Boolean))];
+  // Las guías TESTSYNC son aisladas y recién generadas: no hacemos 3 lecturas dirigidas por guía.
+  const list=[...new Set((guides||[]).map(String).filter(Boolean))].filter(g=>!db.orders?.[g]?._testSync);
   if(!firebaseReady||!list.length)return [];
   const changed=[];
   // Concurrencia limitada: evita ráfagas masivas de lecturas.
@@ -1205,7 +1229,7 @@ async function initFirebase(){
     firebaseServerLive=false;
     setCloudStatus('Firebase: conectando');
 
-    saveSafetyBackup(db,'antes_de_firebase_v41');
+    saveSafetyBackup(db,'antes_de_firebase_v43');
 
     if(!window.firebase)throw new Error('Firebase SDK no cargó');
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -1336,6 +1360,7 @@ function processNormalRows(rows){
       socio:String(getObjValue(r,['SOCIO','CODIGO11'])||old.socio||'').trim(),nombreSocio:String(getObjValue(r,['NOMBRE_SOCIO','NOMBRE12'])||old.nombreSocio||'').trim(),referencia:String(getObjValue(r,['REFERENCIAS','REFERENCIA','REFERENCIA23'])||old.referencia||'').trim(),
       celular:directCell||old.celular||'',status:old.status||'',fechaEntrega:old.fechaEntrega||'',clasificacion:old.clasificacion||'',gestion:old.gestion||'',lockedDelivered:!!old.lockedDelivered,manualResponsable:!!old.manualResponsable
     };
+    if(/^TESTSYNC/i.test(guia))o._testSync=true;
     if(directCell){rememberGuidePhone(guia,directCell,'Base Oriflame');guidePhoneGuides.push(guia)}
     o.canal=channel(cod);o.provincia=inferProvince(o);o.responsable=assignOwner(o);reconcileOrder(o);
     if(!o.canal)missingChannel++;if(!o.responsable)unassigned++;
@@ -1593,7 +1618,7 @@ function timeChartColor(label){const s=N(label);if(s.includes('NO ENTREGADO'))re
 function setChartPlaceholder(wrapId,msg){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<div class="chart-placeholder">${escapeHtml(msg||'Sin datos')}</div>`}
 function restoreChartCanvas(wrapId,canvasId,extraClass=''){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<canvas id="${canvasId}"></canvas>`;if(extraClass)wrap.className='canvas-wrap '+extraClass;else wrap.className='canvas-wrap'}
 function renderDashboard(){const m=$('dMonth').value,closed=!!db.snapshots[m];$('monthStatus').textContent=closed?'MES CERRADO':'MES ABIERTO';$('closeMonth').disabled=!m||closed;const agg=dashboardData();const inferredPending=(agg.porTiempo?.['No entregado']||agg.porTiempo?.['NO ENTREGADO']||0),realDelivered=agg.entregadosReales??Math.max(0,(agg.total||0)-inferredPending),pending=Math.max(0,(agg.total||0)-realDelivered),dp=agg.total?realDelivered*100/agg.total:0,pp=agg.total?pending*100/agg.total:0;$('sumTotal').textContent=agg.total||0;$('sumDelivered').textContent=realDelivered;$('sumPending').textContent=pending;$('sumDeliveredPct').textContent=`${dp.toFixed(1)}% del total`;$('sumPendingPct').textContent=`${pp.toFixed(1)}% del total`;$('sumEffectiveness').textContent=agg.total?`${dp.toFixed(1)}%`:'0%';$('kpiHD').textContent=agg.porCanal.HD||0;$('kpiPUP').textContent=agg.porCanal.PUP||0;$('kpiSPO').textContent=agg.porCanal.SPO||0;const tp=Object.keys(agg.porProvincia).map(k=>({prov:k,cant:agg.porProvincia[k]})).sort((a,b)=>b.cant-a.cant);let htmlP='<div class="tabla-datos"><table><thead><tr><th>Provincia</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumP=0;for(const r of tp){const p=agg.total?Math.round(r.cant*1000/agg.total)/10:0;sumP+=p;htmlP+=`<tr><td>${escapeHtml(r.prov)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlP+='</tbody></table></div>';$('tablaProvincia').innerHTML=tp.length?htmlP:'<div class="empty">Sin datos</div>';$('totalProvincia').textContent=tp.length?`Total: ${Math.round(sumP*10)/10}%`:'';const arrT=Object.keys(agg.porTiempo).map(k=>({k,v:agg.porTiempo[k],p:agg.total?agg.porTiempo[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartTiempo){chartTiempo.destroy();chartTiempo=null}if(arrT.length){restoreChartCanvas('wrapGraficoTiempo','graficoTiempo');chartTiempo=new Chart($('graficoTiempo').getContext('2d'),{type:'bar',data:{labels:arrT.map(x=>x.k),datasets:[{data:arrT.map(x=>x.v),borderWidth:1,backgroundColor:arrT.map(x=>timeChartColor(x.k)),borderColor:arrT.map(x=>timeChartColor(x.k))}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:28}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#213',offset:-4,clamp:true,clip:false,formatter:v=>v}},scales:{x:{beginAtZero:true}}}});$('pngTiempo').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoTiempo','Sin datos');$('pngTiempo').style.display='none'}let htmlT='<div class="tabla-datos"><table><thead><tr><th>Tiempo de Entrega</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumT=0;for(const o of arrT){const p=Math.round(o.p*10)/10;sumT+=o.p;htmlT+=`<tr><td>${escapeHtml(o.k)}</td><td>${o.v}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlT+='</tbody></table></div>';$('tablaTiempo').innerHTML=arrT.length?htmlT:'<div class="empty">Sin datos</div>';$('totalTiempo').textContent=arrT.length?`Total: ${Math.round(sumT*10)/10}%`:'';const tc=Object.keys(agg.porClaim).map(k=>({claim:k,cant:agg.porClaim[k],p:agg.total?agg.porClaim[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartClaims){chartClaims.destroy();chartClaims=null}if(tc.length){restoreChartCanvas('wrapGraficoClaims','graficoClaims','claims');chartClaims=new Chart($('graficoClaims').getContext('2d'),{type:'bar',data:{labels:tc.map(x=>x.claim),datasets:[{data:tc.map(x=>x.cant),borderWidth:1,backgroundColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length]),borderColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length])}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});$('pngClaims').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoClaims','Sin datos');$('pngClaims').style.display='none'}let htmlC='<div class="tabla-datos"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumC=0;for(const r of tc){const p=Math.round(r.p*10)/10;sumC+=r.p;htmlC+=`<tr><td>${escapeHtml(r.claim)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlC+='</tbody></table></div>';$('tablaClaims').innerHTML=tc.length?htmlC:'<div class="empty">Sin datos</div>';$('totalClaims').textContent=tc.length?`Total: ${Math.round(sumC*10)/10}%`:'';$('valorEfectividad').textContent=agg.efectividad==null?'-':agg.efectividad.toFixed(1)+'%';$('valorEfectividadTiempo').textContent=agg.efectividadTiempo==null?'-':agg.efectividadTiempo.toFixed(1)+'%'}
-function renderConfig(){const active=db.owners.filter(o=>o.active);$('iOwner').innerHTML='<option value="">Todos</option>'+active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('newZoneOwner').innerHTML=active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('ownersList').innerHTML=db.owners.map((o,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><input data-owner-name="${i}" value="${escapeHtml(o.name)}"><input data-owner-phone="${i}" value="${escapeHtml(o.phone||'')}"><div class="owner-actions"><button class="btn owner-replace" data-owner-replace="${i}">♻ Reemplazar</button><button class="btn" data-owner-toggle="${i}">${o.active?'Desactivar':'Activar'}</button></div></div>`).join('');$('claimsList').innerHTML=db.claims.map((c,i)=>`<div class="listrow"><input data-claim-name="${i}" value="${escapeHtml(c.name)}"><input data-claim-desc="${i}" value="${escapeHtml(c.desc||'')}"><button class="btn btn-danger" data-claim-del="${i}">Eliminar</button></div>`).join('');$('zonesList').innerHTML=db.zones.map((z,i)=>`<div class="listrow"><input data-zone-name="${i}" value="${escapeHtml(z.zone)}"><select data-zone-owner="${i}">${active.map(o=>`<option ${o.name===z.owner?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select><button class="btn btn-danger" data-zone-del="${i}">Eliminar</button></div>`).join('');const hs=[...(db.settings?.holidays||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)));$('holidaysList').innerHTML=hs.length?hs.map((h,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><strong>${escapeHtml(displayDate(h.date))}</strong><span>-${Number(h.days||0)} día/s</span><button class="btn btn-danger" data-holiday-del="${escapeHtml(h.date)}">Eliminar</button></div>`).join(''):'<div class="empty">Sin feriados configurados</div>';$('pupDaysConfig').value=Number(db.settings?.pupDays??1);renderContacts();$('pClaim').innerHTML='<option value="">Todos</option>'+db.claims.map(c=>`<option>${escapeHtml(c.name)}</option>`).join('')}
+function renderConfig(){const active=db.owners.filter(o=>o.active);$('iOwner').innerHTML='<option value="">Todos</option>'+active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('newZoneOwner').innerHTML=active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('ownersList').innerHTML=db.owners.map((o,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><input data-owner-name="${i}" value="${escapeHtml(o.name)}"><input data-owner-phone="${i}" value="${escapeHtml(o.phone||'')}"><div class="owner-actions"><button class="btn owner-replace" data-owner-replace="${i}">♻ Reemplazar</button><button class="btn" data-owner-toggle="${i}">${o.active?'Desactivar':'Activar'}</button></div></div>`).join('');$('claimsList').innerHTML=db.claims.map((c,i)=>`<div class="listrow"><input data-claim-name="${i}" value="${escapeHtml(c.name)}"><input data-claim-desc="${i}" value="${escapeHtml(c.desc||'')}"><button class="btn btn-danger" data-claim-del="${i}">Eliminar</button></div>`).join('');$('zonesList').innerHTML=db.zones.map((z,i)=>`<div class="listrow"><input data-zone-name="${i}" value="${escapeHtml(z.zone)}"><select data-zone-owner="${i}">${active.map(o=>`<option ${o.name===z.owner?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select><button class="btn btn-danger" data-zone-del="${i}">Eliminar</button></div>`).join('');const hs=[...(db.settings?.holidays||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)));$('holidaysList').innerHTML=hs.length?hs.map((h,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><strong>${escapeHtml(displayDate(h.date))}</strong><span>-${Number(h.days||0)} día/s</span><button class="btn btn-danger" data-holiday-del="${escapeHtml(h.date)}">Eliminar</button></div>`).join(''):'<div class="empty">Sin feriados configurados</div>';$('pupDaysConfig').value=Number(db.settings?.pupDays??1);renderContacts();$('pClaim').innerHTML='<option value="">Todos</option>'+db.claims.map(c=>`<option>${escapeHtml(c.name)}</option>`).join('');renderSyncTestPanel()}
 function renderContacts(){const q=N($('contactSearch').value),rows=Object.entries(db.contacts).filter(([s,c])=>!q||N(s+' '+c.phone).includes(q)).sort((a,b)=>String(b[1].updated||'').localeCompare(String(a[1].updated||'')));$('contactsList').innerHTML=rows.length?rows.map(([s,c])=>`<div class="listrow"><input value="${escapeHtml(s)}" disabled><input data-contact-phone="${escapeHtml(s)}" value="${escapeHtml(c.phone||'')}"><span style="font-size:10px;color:#697772">${escapeHtml(c.updated||'')} · ${escapeHtml(c.source||'')}</span></div>`).join(''):'<div class="empty">Sin contactos</div>'}
 function renderAll(){ensureMonthSelects();renderConfig();renderOrders();renderInfo();renderDashboard()}
 function reloadSharedDB(showToast=false){if(firebaseReady)return;const latest=loadDB();if((latest._updatedAt||0)>(db._updatedAt||0)){db=latest;renderAll();if(showToast)toast('Datos locales actualizados')}}
@@ -1678,7 +1703,7 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos')renderOrders();else if(b.dataset.page==='infobip')renderInfo();else if(b.dataset.page==='config'){await loadAuxCollectionOnce('contacts');renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos')renderOrders();else if(b.dataset.page==='infobip')renderInfo();else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders()});['pMonth','pDate','pChannel','pStatus','pServiStatus','pClaim'].forEach(id=>$(id).addEventListener('change',renderOrders));$('pSearch').addEventListener('input',renderOrders);$('copyGuides').addEventListener('click',async()=>{const rows=orderRows(),guias=rows.map(o=>String(o.guia||'').trim()).filter(Boolean);if(!guias.length){toast('No hay guías con estos filtros');return}const text=guias.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(guias.length+' guías copiadas')});
@@ -1751,7 +1776,120 @@ $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOB
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
 $('dMonth').addEventListener('change',renderDashboard);$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
+// Laboratorio de sincronización de bases · v43 · lote de 100
+const SYNC_TEST_KEY='servientrega_sync_test_v43';
+const SYNC_TEST_COUNT=100;
+function loadSyncTest(){try{return JSON.parse(localStorage.getItem(SYNC_TEST_KEY)||'null')}catch(e){return null}}
+function saveSyncTest(x){try{if(x)localStorage.setItem(SYNC_TEST_KEY,JSON.stringify(x));else localStorage.removeItem(SYNC_TEST_KEY)}catch(e){}}
+function testDateText(d=new Date()){return`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`}
+function buildSyncTestPackage(){
+  const now=new Date(),stamp=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+  const prefix='TESTSYNC'+stamp+Math.floor(Math.random()*90+10),fecha=testDateText(now),socio='TSTBULK'+stamp.slice(-8),phone='099880'+String(Math.floor(Math.random()*10000)).padStart(4,'0');
+  const normalHeader=['COURIER','NO_GUIA','FECHA_GUIA','COD_DISTR','NOMBRE_DESTINATARIO','DIRECCION_ENVIO','BARRIO','TELEFONO_1','TELEFONO_2','NUMERO_DE_ORDEN','ORDER_DATE','CIUDAD','PROVINCIA','PESO','BULTOS','PROMESA_DE_ENTREGA'];
+  const serviHeader=['GUIA','ESTADO','FECHA_ENTREGA'];
+  const tcHeader=['WAYBILL_NUMBER','SOCIO','NOMBRE_SOCIO','TELEFONO_SOCIO','REFERENCIAS','COURIER'];
+  const normalRows=[normalHeader],serviRows=[serviHeader],tcRows=[tcHeader],guides=[];
+  const cities=[['GUAYAQUIL','GUAYAS'],['QUITO','PICHINCHA'],['CUENCA','AZUAY'],['MACHALA','EL ORO'],['MANTA','MANABI']];
+  for(let i=1;i<=SYNC_TEST_COUNT;i++){
+    const seq=String(i).padStart(3,'0'),guia=prefix+seq,[ciudad,provincia]=cities[(i-1)%cities.length];
+    guides.push(guia);
+    // Alterna HD / PUP / SPO para validar también que el procesamiento no dependa de un único canal.
+    const cod=i%3===1?'090101':i%3===2?'501':'601';
+    normalRows.push(['Servientrega - GYE',guia,fecha,cod,`PRUEBA SYNC ${seq}`,`AV. FIREBASE PRUEBA ${seq}`,`SECTOR TEST ${seq}`,'','',`TEST-ORDER-${stamp}-${seq}`,fecha,ciudad,provincia,String(1+(i%5)/10),'1',fecha]);
+    serviRows.push([guia,`INGRESANDO EN AGENCIA - PRUEBA SYNC ${seq}`,'']);
+    tcRows.push([guia,socio,`SOCIO PRUEBA SINCRONIZACION ${seq}`,phone,`REFERENCIA PRUEBA FIREBASE ${seq}`,'SERVIENTREGA']);
+  }
+  return{prefix,guides,count:guides.length,socio,phone,createdAt:Date.now(),normal:normalRows.map(r=>r.join('\t')).join('\n'),servi:serviRows.map(r=>r.join('\t')).join('\n'),tc:tcRows.map(r=>r.join('\t')).join('\n')};
+}
+function syncTestCounts(t){
+  const guides=Array.isArray(t?.guides)?t.guides:[];
+  let visible=0,servi=0,tc=0;
+  for(const g of guides){
+    const o=db.orders?.[g];if(!o)continue;visible++;
+    if(N(o.status||'').includes('PRUEBA SYNC'))servi++;
+    if(String(o.socio||'')===String(t.socio||'')||String(o.nombreSocio||'').includes('PRUEBA SINCRONIZACION'))tc++;
+  }
+  return{visible,servi,tc,total:guides.length};
+}
+function syncTestStage(t){
+  if(!t)return'Sin prueba';
+  const c=syncTestCounts(t);
+  if(!c.visible)return'Preparada · aún no cargada';
+  if(c.tc===c.total)return'3/3 · Total Control aplicado';
+  if(c.servi===c.total)return'2/3 · Base Servientrega aplicada';
+  return'1/3 · Base Oriflame aplicada';
+}
+function renderSyncTestPanel(){
+  const box=$('syncTestInfo');if(!box)return;
+  const t=loadSyncTest(),has=!!t;
+  for(const id of ['copyTestNormal','copyTestServi','copyTestTc','syncTestCleanup'])if($(id))$(id).disabled=!has;
+  if(!has){box.innerHTML='No hay una prueba preparada en esta PC.';return}
+  const c=syncTestCounts(t);
+  const estWrites=100+100+101+101+4; // normal + servi + TC/contacto + limpieza + señales
+  box.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap"><span><b>Lote:</b> ${escapeHtml(t.prefix)}</span><span><b>Etapa:</b> ${escapeHtml(syncTestStage(t))}</span><span><b>Pedidos visibles:</b> ${c.visible}/${c.total}</span><span><b>Status sync:</b> ${c.servi}/${c.total}</span><span><b>TC sync:</b> ${c.tc}/${c.total}</span></div><div style="margin-top:7px;color:#6D7A75">Consumo diseñado para esta prueba completa: aprox. <b>${estWrites} escrituras</b> en total contando la limpieza. Cada PC adicional recibe aprox. 400 cambios de pedido durante las 4 etapas, más su lectura inicial normal de pedidos activos. No se fuerza una descarga completa después de cada base.</div>`;
+}
+async function copyTextSafe(text){
+  try{await navigator.clipboard.writeText(text);return true}catch(e){
+    try{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();return true}catch(_){return false}
+  }
+}
+async function copySyncTest(kind){
+  const t=loadSyncTest();if(!t)return toast('Primero genera el lote de 100');
+  const labels={normal:'Base Oriflame · 100',servi:'Base Servientrega · 100',tc:'Total Control · 100'};
+  const ok=await copyTextSafe(t[kind]);
+  if(ok)toast(`${labels[kind]} copiada · pégala en Pegar bases`);else alert('No se pudo copiar. Intenta nuevamente.');
+}
+async function cleanupSyncTest(){
+  const t=loadSyncTest();if(!t)return toast('No hay prueba preparada');
+  const guides=Array.isArray(t.guides)?[...new Set(t.guides.map(String))]:[];
+  if(!guides.length||guides.length>SYNC_TEST_COUNT||!t.prefix||!guides.every(g=>g.startsWith(t.prefix)&&/^TESTSYNC/i.test(g)))return alert('El lote de prueba no pasó la validación de seguridad. No se eliminará nada.');
+  if(!confirm(`¿Limpiar únicamente las ${guides.length} guías de prueba ${t.prefix}…?\n\nSe retirarán de todas las PCs mediante baja lógica. No se tocarán pedidos reales.`))return;
+  const socio=t.socio;
+  for(const guia of guides){delete db.orders[guia];delete db.sources.tc[guia];delete db.sources.servi[guia];delete db.sources.guidePhones[guia]}
+  if(db.contacts[socio]&&String(db.contacts[socio].phone||'')===String(t.phone||''))delete db.contacts[socio];
+  localCache();renderAll();
+  if(firebaseReady){
+    try{
+      setCloudStatus(`Firebase: limpiando ${guides.length} pruebas...`,'saving');
+      // Los pedidos siempre se retiran con tombstone (_active:false), nunca con delete físico.
+      const orderOps=guides.map(guia=>({type:'delete',collection:FB.orders,key:guia}));
+      await commitOps(orderOps);
+      // Las bases auxiliares solo se tombstonean si realmente llegaron a subirse (por ejemplo, si se procesaron fuera de orden).
+      const auxOps=[];
+      for(const guia of guides){
+        if(cloudFP.tc[guia])auxOps.push({type:'delete',collection:FB.tc,key:guia});
+        if(cloudFP.servi[guia])auxOps.push({type:'delete',collection:FB.servi,key:guia});
+        if(cloudFP.guidePhones[guia])auxOps.push({type:'delete',collection:FB.guidePhones,key:guia});
+      }
+      if(cloudFP.contacts[socio]||db.contacts[socio]===undefined)auxOps.push({type:'delete',collection:FB.contacts,key:socio});
+      if(auxOps.length)await commitOps(auxOps);
+      for(const guia of guides){delete cloudFP.orders[guia];delete cloudFP.tc[guia];delete cloudFP.servi[guia];delete cloudFP.guidePhones[guia]}
+      delete cloudFP.contacts[socio];
+      await publishSyncSignal('test-cleanup-bulk','',guides.length,Date.now());
+      setCloudStatus('Firebase: ✓ 100 pruebas limpiadas · '+liveTime());
+    }catch(err){console.error('Test cleanup',err);alert('Las pruebas se quitaron de esta PC, pero Firebase no confirmó toda la limpieza. No generes otro lote hasta revisar.');return}
+  }
+  saveSyncTest(null);renderSyncTestPanel();toast(`${guides.length} pruebas retiradas sin tocar pedidos reales`);
+}
+
 // Config
+$('syncTestCreate')?.addEventListener('click',()=>{
+  const current=loadSyncTest();
+  if(current){const c=syncTestCounts(current);if(c.visible>0)return alert(`Ya existe un lote activo con ${c.visible} guías visibles. Límpialo antes de generar otro.`)}
+  const t=buildSyncTestPackage();saveSyncTest(t);renderSyncTestPanel();toast('Lote de 100 preparado · todavía no se cargó nada');
+});
+$('copyTestNormal')?.addEventListener('click',()=>copySyncTest('normal'));
+$('copyTestServi')?.addEventListener('click',()=>copySyncTest('servi'));
+$('copyTestTc')?.addEventListener('click',()=>copySyncTest('tc'));
+$('syncTestCleanup')?.addEventListener('click',cleanupSyncTest);
+
+// Maestro de contactos: lectura completa solo bajo demanda, no al abrir Configuración.
+$('loadContactsCloud')?.addEventListener('click',async e=>{
+  const btn=e.currentTarget;if(auxLoaded.contacts){renderContacts();return toast('Maestro Firebase ya cargado en esta sesión')}
+  btn.disabled=true;const old=btn.textContent;btn.textContent='Cargando...';
+  try{await loadAuxCollectionOnce('contacts');renderContacts();toast('Maestro de contactos cargado bajo demanda')}
+  finally{btn.disabled=false;btn.textContent=old}
+});
 $('addOwner').addEventListener('click',()=>{const name=$('newOwnerName').value.trim(),phone=cleanPhone($('newOwnerPhone').value);if(!name)return;db.owners.push({name,phone,active:true});$('newOwnerName').value='';$('newOwnerPhone').value='';saveDB();renderAll()});$('ownersList').addEventListener('change',e=>{const el=e.target,touched=[];if(el.dataset.ownerName!==undefined){const i=+el.dataset.ownerName,old=db.owners[i].name,newn=el.value.trim()||old;db.owners[i].name=newn;for(const z of db.zones)if(z.owner===old)z.owner=newn;for(const o of Object.values(db.orders))if(o.responsable===old){o.responsable=newn;o._syncClient=CLIENT_ID;o._syncAt=Date.now();touched.push(o.guia)}}if(el.dataset.ownerPhone!==undefined)db.owners[+el.dataset.ownerPhone].phone=cleanPhone(el.value);saveDB();if(touched.length)syncExplicitBulkNow('owner-rename',{orderGuides:touched});renderAll()});$('ownersList').addEventListener('click',e=>{const rb=e.target.closest('[data-owner-replace]');if(rb){const i=+rb.dataset.ownerReplace,o=db.owners[i];const guides=Object.values(db.orders).filter(x=>x.responsable===o.name).length,zones=db.zones.filter(z=>z.owner===o.name).length;$('replaceOwnerIndex').value=i;$('replaceOwnerName').value='';$('replaceOwnerPhone').value='';$('replaceOwnerSummary').innerHTML=`<b>${escapeHtml(o.name)}</b> tiene <b>${guides}</b> pedidos abiertos y <b>${zones}</b> zonas asignadas. Todo pasará al nuevo responsable.`;$('replaceOwnerModal').style.display='flex';return}const b=e.target.closest('[data-owner-toggle]');if(!b)return;db.owners[+b.dataset.ownerToggle].active=!db.owners[+b.dataset.ownerToggle].active;saveDB();renderAll()});$('addClaim').addEventListener('click',()=>{const n=$('newClaim').value.trim();if(!n)return;db.claims.push({name:n,desc:''});$('newClaim').value='';saveDB();renderAll()});$('claimsList').addEventListener('change',e=>{const el=e.target,touched=[];if(el.dataset.claimName!==undefined){const i=+el.dataset.claimName,old=db.claims[i].name,newn=el.value.trim()||old;db.claims[i].name=newn;for(const o of Object.values(db.orders))if(o.clasificacion===old){o.clasificacion=newn;o._syncClient=CLIENT_ID;o._syncAt=Date.now();touched.push(o.guia)}}if(el.dataset.claimDesc!==undefined)db.claims[+el.dataset.claimDesc].desc=el.value;saveDB();if(touched.length)syncExplicitBulkNow('claim-rename',{orderGuides:touched});renderAll()});$('claimsList').addEventListener('click',e=>{const b=e.target.closest('[data-claim-del]');if(!b)return;db.claims.splice(+b.dataset.claimDel,1);saveDB();renderAll()});$('addZone').addEventListener('click',()=>{const zone=$('newZone').value.trim(),owner=$('newZoneOwner').value;if(!zone||!owner)return;const exist=db.zones.find(z=>N(z.zone)===N(zone));if(exist)exist.owner=owner;else db.zones.push({zone,owner});const touched=[];for(const o of Object.values(db.orders)){const before=o.responsable;o.responsable=assignOwner(o);if(before!==o.responsable){o._syncClient=CLIENT_ID;o._syncAt=Date.now();touched.push(o.guia)}}$('newZone').value='';saveDB();if(touched.length)syncExplicitBulkNow('zone',{orderGuides:touched});renderAll()});$('zonesList').addEventListener('change',e=>{const el=e.target;if(el.dataset.zoneName!==undefined)db.zones[+el.dataset.zoneName].zone=el.value.trim();if(el.dataset.zoneOwner!==undefined)db.zones[+el.dataset.zoneOwner].owner=el.value;const touched=[];for(const o of Object.values(db.orders)){const before=o.responsable;o.responsable=assignOwner(o);if(before!==o.responsable){o._syncClient=CLIENT_ID;o._syncAt=Date.now();touched.push(o.guia)}}saveDB();if(touched.length)syncExplicitBulkNow('zone',{orderGuides:touched});renderAll()});$('zonesList').addEventListener('click',e=>{const b=e.target.closest('[data-zone-del]');if(!b)return;db.zones.splice(+b.dataset.zoneDel,1);saveDB();renderAll()});$('contactSearch').addEventListener('input',renderContacts);$('addContact').addEventListener('click',()=>{const s=$('newSocio').value.trim(),p=cleanPhone($('newPhone').value);if(!s||!p)return;registerContact(s,p,'Manual');const touched=[],phones=[];for(const o of Object.values(db.orders))if(o.socio===s){o.celular=p;o._syncClient=CLIENT_ID;o._syncAt=Date.now();rememberGuidePhone(o.guia,p,'Maestro de Contactos');touched.push(o.guia);phones.push(o.guia)}$('newSocio').value='';$('newPhone').value='';saveDB();syncExplicitBulkNow('contact',{orderGuides:touched,contactSocios:[s],guidePhoneGuides:phones});renderAll()});$('contactsList').addEventListener('change',e=>{const s=e.target.dataset.contactPhone;if(!s)return;const p=cleanPhone(e.target.value);registerContact(s,p,'Manual');const touched=[],phones=[];for(const o of Object.values(db.orders))if(o.socio===s){o.celular=p;o._syncClient=CLIENT_ID;o._syncAt=Date.now();rememberGuidePhone(o.guia,p,'Maestro de Contactos');touched.push(o.guia);phones.push(o.guia)}saveDB();syncExplicitBulkNow('contact',{orderGuides:touched,contactSocios:[s],guidePhoneGuides:phones});renderAll()});
 
 $('confirmReplaceOwner').addEventListener('click',()=>{const i=+$('replaceOwnerIndex').value;if(!Number.isInteger(i)||!db.owners[i])return;const old=db.owners[i].name,newName=$('replaceOwnerName').value.trim(),newPhone=cleanPhone($('replaceOwnerPhone').value),touched=[];if(!newName)return toast('Ingresa el nuevo responsable');const existingIndex=db.owners.findIndex((o,j)=>j!==i&&N(o.name)===N(newName));if(existingIndex>=0){const target=db.owners[existingIndex];if(newPhone)target.phone=newPhone;target.active=true;for(const z of db.zones)if(z.owner===old)z.owner=target.name;for(const o of Object.values(db.orders))if(o.responsable===old){o.responsable=target.name;o._syncClient=CLIENT_ID;o._syncAt=Date.now();touched.push(o.guia)}db.owners.splice(i,1);if(activeOwner===old)activeOwner=target.name}else{db.owners[i].name=newName;db.owners[i].phone=newPhone||db.owners[i].phone;db.owners[i].active=true;for(const z of db.zones)if(z.owner===old)z.owner=newName;for(const o of Object.values(db.orders))if(o.responsable===old){o.responsable=newName;o._syncClient=CLIENT_ID;o._syncAt=Date.now();touched.push(o.guia)}if(activeOwner===old)activeOwner=newName}$('replaceOwnerModal').style.display='none';saveDB();if(touched.length)syncExplicitBulkNow('owner-replace',{orderGuides:touched});renderAll();toast(`${old} reemplazado por ${newName}`)});
@@ -1803,7 +1941,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v41';
+      const bs=$('buildStatus');if(bs)bs.textContent='v43';
     }
   }catch(e){
     console.warn('Build check',e);
