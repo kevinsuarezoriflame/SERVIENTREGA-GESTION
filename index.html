@@ -163,7 +163,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase conectado</span><br><span id="buildStatus" style="opacity:.75">v38</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase conectado</span><br><span id="buildStatus" style="opacity:.75">v40</span></div>
 </aside>
 
 <main class="main">
@@ -467,8 +467,8 @@ const LOCALIDAD_PROV={
   "SAN ISIDRO (BAHIA)":"MANABI",
   "BAHIA DE CARAQUEZ":"MANABI"
 };
-function freshDB(){return{version:26,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
-function normalizeDB(x){x=x||freshDB();x.version=26;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
+function freshDB(){return{version:27,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
+function normalizeDB(x){x=x||freshDB();x.version=27;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
 let db=loadDB(),activeOwner='TODOS',daysSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
 const $=id=>document.getElementById(id);
@@ -481,7 +481,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v38.20260907.1';
+const APP_BUILD='v41.20260907.2';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -499,24 +499,26 @@ const remotePulse={};
 let remotePulseTimer=null;
 
 let syncChannel=null,fsDB=null,firebaseReady=false,cloudApplying=false,cloudSyncTimer=null,cloudSyncRunning=false;
-let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0,lastOrderListenerAt=0,cloudStatusTimer=null,listenersStarted=false,ordersInitialSnapshot=false;
+let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0,lastOrderListenerAt=0,cloudStatusTimer=null,listenersStarted=false,ordersInitialSnapshot=false,ordersServerSnapshotSeen=false,firestoreConfigured=false,persistenceAttempted=false,firebaseServerLive=false;
+const ACTIVE_ORDER_SCHEMA=1;
+const auxLoaded={contacts:false,snapshots:false};
 let cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
 try{if('BroadcastChannel'in window)syncChannel=new BroadcastChannel(SYNC_CHANNEL_NAME)}catch(e){}
 
 function setCloudStatus(text,state=''){
   const el=$('cloudStatus');if(!el)return;
   const dot=document.querySelector('.sidebar-bottom .live-dot');
-  if(state==='error'){
-    el.textContent='Firebase desconectado';
-    el.style.color='#ffd5d5';
-    if(dot)dot.style.background='#ff8a8a';
-  }else{
-    el.textContent='Firebase conectado';
-    el.style.color='#fff';
-    if(dot)dot.style.background='#70e6a2';
-  }
+  const raw=String(text||'Firebase').replace(/^Firebase:\s*/i,'').trim();
+  const lower=raw.toLowerCase();
+  if(state==='error'||/(desconectado|sin conexión|error|permiso denegado|tiempo agotado|configuración)/i.test(raw))firebaseServerLive=false;
+  if(state!=='error'&&/(en vivo|conectado|guardado|sincronizado|confirmado|actualización recibida)/i.test(raw))firebaseServerLive=true;
+  const isSaving=state==='saving'||/(conectando|sincronizando|migrando|recuperando)/i.test(raw);
+  const ok=firebaseServerLive&&!isSaving;
+  el.textContent='Firebase · '+(raw|| (ok?'conectado':'desconectado'));
+  el.title=el.textContent;
+  el.style.color=state==='error'?'#ffd5d5':isSaving?'#fff1b8':'#fff';
+  if(dot)dot.style.background=state==='error'?'#ff8a8a':isSaving?'#ffd166':ok?'#70e6a2':'#c7d1cc';
 }
-
 function firebaseErrorText(err){
   const code=String(err?.code||'').replace('firestore/','');
   const msg=String(err?.message||'').replace(/\s+/g,' ').trim();
@@ -669,9 +671,10 @@ function refreshActiveForOrderChange(guia,fields=[],remote=false){
   }
 }
 function flashSaved(){
+  firebaseServerLive=true;
   clearTimeout(cloudStatusTimer);
-  setCloudStatus('Firebase: ✓ Guardado · '+liveTime());
-  cloudStatusTimer=setTimeout(()=>setCloudStatus('Firebase: EN VIVO · '+liveTime()),750);
+  setCloudStatus('Firebase: guardado');
+  cloudStatusTimer=setTimeout(()=>setCloudStatus('Firebase: conectado'),750);
 }
 function applyServerOrder(guia,d){
   if(!d)return;
@@ -688,8 +691,13 @@ async function fetchOrderFromServer(guia){
     const ref=fsDB.collection(FB.orders).doc(safeDocId(guia));
     const doc=await ref.get({source:'server'});
     if(doc.exists){
-      applyServerOrder(guia,doc.data()||{});
-      setCloudStatus('Firebase: cambio confirmado · '+liveTime());
+      const d=stripWriteGuard(doc.data()||{});
+      if(d._deleted===true||d._active===false){
+        if(db.orders[guia]){delete db.orders[guia];delete cloudFP.orders[guia];localCache();refreshActiveForOrderChange(guia,['_active'],true)}
+      }else{
+        applyServerOrder(guia,d);
+        setCloudStatus('Firebase: cambio confirmado · '+liveTime());
+      }
     }else if(db.orders[guia]){
       delete db.orders[guia];delete cloudFP.orders[guia];localCache();
       if(activePageId()==='pedidos')renderOrders();
@@ -701,7 +709,7 @@ async function fetchOrderFromServer(guia){
 async function refreshOrdersFromServer(){
   if(!firebaseReady)return;
   try{
-    const snap=await fsDB.collection(FB.orders).get({source:'server'}),fresh={};
+    const snap=await fsDB.collection(FB.orders).where('_active','==',true).get({source:'server'}),fresh={};
     snap.forEach(doc=>{const raw=doc.data()||{},d=stripWriteGuard(raw);if(d._deleted)return;const key=String(d.guia||decodeURIComponent(doc.id));fresh[key]=d});
     db.orders=fresh;cloudFP.orders={};
     for(const [key,d] of Object.entries(fresh))cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
@@ -714,36 +722,12 @@ async function refreshOrdersFromServer(){
 function processSyncSignal(signal){
   if(!signal||signal.client===CLIENT_ID||!signal.nonce||signal.nonce===lastSyncNonce)return;
   lastSyncNonce=signal.nonce;
+  // v41: la señal NO provoca lecturas adicionales. El listener de pedidos recibe
+  // únicamente los documentos realmente modificados por Firestore.
   if(signal.kind==='order'&&signal.guide){
-    const guide=String(signal.guide),wanted=Number(signal.orderSyncAt||0);
-    $('restoreSafetyBackup')?.addEventListener('click',async()=>{
-  const b=loadSafetyBackup();
-  if(!b||!meaningfulLocal(b.db))return alert('No existe una copia local de seguridad disponible en esta computadora.');
-  const count=Object.keys(b.db.orders||{}).length;
-  if(!confirm(`Se encontró una copia local con ${count} pedidos, guardada ${b.savedAt||''}. ¿Recuperarla y combinarla con Firebase?`))return;
-  try{
-    const currentCloud=normalizeDB(JSON.parse(JSON.stringify(db)));
-    const recovery=unionCloudWithLocal(currentCloud,b.db);
-    db=recovery.db;
-    localCache();
-    renderAll();
-    await restoreMissingLocalToFirebase(recovery);
-    toast('Copia local recuperada sin borrar Firebase');
-  }catch(err){alert(err.message||err)}
-});
-
-// Respaldo: damos tiempo al onSnapshot directo. Solo releemos si no llegó.
-    setTimeout(()=>{
-      const current=Number(db.orders[guide]?._syncAt||0);
-      if(!wanted||current<wanted)fetchOrderFromServer(guide);
-    },650);
+    setCloudStatus('Firebase: cambio remoto recibido · '+liveTime());
   }else if(signal.kind==='bulk'||String(signal.kind||'').endsWith('-bulk')){
-    // Every bulk load is authoritative. Other PCs read the official server state again.
-    setTimeout(async()=>{
-      await refreshOrdersFromServer();
-      setCloudStatus(`Firebase: actualización recibida · ${Number(signal.count||0)} cambios`);
-      toast('Datos actualizados desde Firebase');
-    },100);
+    setCloudStatus(`Firebase: actualización en vivo · ${Number(signal.count||0)} cambios`);
   }
 }
 async function checkSyncStateFromServer(){
@@ -771,9 +755,8 @@ function syncAuxContactBackground(o){
   if(o.socio&&db.contacts[o.socio])jobs.push(
     fsDB.collection(FB.contacts).doc(safeDocId(o.socio)).set(guardedData(db.contacts[o.socio]),{merge:false})
   );
-  if(o.guia&&db.sources.guidePhones[o.guia])jobs.push(
-    fsDB.collection(FB.guidePhones).doc(safeDocId(o.guia)).set(guardedData(db.sources.guidePhones[o.guia]),{merge:false})
-  );
+  // El teléfono ya viaja dentro del pedido activo; no duplicamos una escritura
+  // por guía salvo que sea un cruce futuro sin pedido activo.
   Promise.allSettled(jobs).catch(()=>{});
 }
 function updateOrderLive(guia,patch,{render='smart'}={}){
@@ -831,6 +814,7 @@ function isPermissionDenied(err){
 }
 function handleWriteError(err,context='cambio'){
   console.error(context,err);
+  firebaseServerLive=false;
   if(isPermissionDenied(err)){
     setCloudStatus('Versión desactualizada · recargando...','error');
     toast('Esta versión ya no puede modificar. Actualizando...');
@@ -871,10 +855,15 @@ async function syncConfigOnly(){
     cloudFP.config=s;
   }catch(err){if(!handleWriteError(err,'Config sync'))console.error('Config sync',err)}
 }
-function configPayload(){return cleanCloudValue({version:26,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
+function configPayload(){return cleanCloudValue({version:27,owners:db.owners,zones:db.zones,claims:db.claims,settings:db.settings})}
 function mapPayload(group,key,val){
   const out=cleanCloudValue(val);
-  if(group==='orders'&&!out.guia)out.guia=key;
+  if(group==='orders'){
+    if(!out.guia)out.guia=key;
+    // v41: la colección operativa solo escucha documentos activos.
+    // Los cerrados quedan archivados lógicamente y ya no consumen lecturas al abrir la web.
+    out._active=out._deleted===true?false:true;
+  }
   if(group==='contacts'&&!out.socio)out.socio=key;
   if((group==='tc'||group==='servi'||group==='guidePhones')&&!out.guia)out.guia=key;
   if(group==='snapshots'&&!out.month)out.month=key;
@@ -886,7 +875,7 @@ async function commitOps(ops){
     for(const op of ops.slice(i,i+400)){
       const ref=fsDB.collection(op.collection).doc(safeDocId(op.key));
       if(op.type==='delete'){
-        batch.set(ref,guardedData({_deleted:true,_deletedAt:Date.now()}),{merge:false});
+        batch.set(ref,guardedData({guia:String(op.key),_deleted:true,_deletedAt:Date.now(),_active:false}),{merge:false});
       }else batch.set(ref,guardedData(op.data),{merge:false});
     }
     await batch.commit();
@@ -913,9 +902,10 @@ async function syncDBToCloud(){
     if(cloudFP.config!==cfgS)ops.push({type:'set',collection:FB.config,key:'principal',data:cfg});
     ops.push(...diffMapOps('orders',FB.orders,db.orders));
     ops.push(...diffMapOps('contacts',FB.contacts,db.contacts));
-    ops.push(...diffMapOps('tc',FB.tc,db.sources.tc));
-    ops.push(...diffMapOps('servi',FB.servi,db.sources.servi));
-    ops.push(...diffMapOps('guidePhones',FB.guidePhones,db.sources.guidePhones));
+    const futureOnly=map=>Object.fromEntries(Object.entries(map||{}).filter(([g])=>!db.orders[g]));
+    ops.push(...diffMapOps('tc',FB.tc,futureOnly(db.sources.tc)));
+    ops.push(...diffMapOps('servi',FB.servi,futureOnly(db.sources.servi)));
+    ops.push(...diffMapOps('guidePhones',FB.guidePhones,futureOnly(db.sources.guidePhones)));
     ops.push(...diffMapOps('snapshots',FB.snapshots,db.snapshots));
     if(ops.length){
       const orderOps=ops.filter(op=>op.collection===FB.orders);
@@ -983,6 +973,38 @@ async function readCollection(collection,group){
   snap.forEach(doc=>{const raw=doc.data()||{},d=stripWriteGuard(raw);if(d._deleted)return;const key=String(d.guia||d.socio||d.month||decodeURIComponent(doc.id));map[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d))});
   return map;
 }
+async function bootstrapMissingCloudState(){
+  // Primera puesta en línea: solo migra una colección local cuando esa colección
+  // todavía está vacía en Firestore. Nunca pisa una colección que ya tenga datos.
+  const probes=await Promise.all([
+    fsDB.collection(FB.config).doc('principal').get({source:'server'}),
+    fsDB.collection(FB.orders).limit(1).get({source:'server'}),
+    fsDB.collection(FB.contacts).limit(1).get({source:'server'}),
+    fsDB.collection(FB.snapshots).limit(1).get({source:'server'})
+  ]);
+  firebaseServerLive=true;
+  const [cfgDoc,ordersProbe,contactsProbe,snapProbe]=probes;
+  const ops=[];
+  if(!cfgDoc.exists)ops.push({type:'set',collection:FB.config,key:'principal',data:configPayload()});
+  const appendMap=(empty,group,collection,map)=>{
+    if(!empty)return;
+    for(const [key,val] of Object.entries(map||{}))ops.push({type:'set',collection,key,data:mapPayload(group,key,val)});
+  };
+  appendMap(ordersProbe.empty,'orders',FB.orders,db.orders);
+  // v41: no vuelca automáticamente bases auxiliares históricas completas al iniciar.
+  // El maestro de contactos se migra solo si es de tamaño razonable; TC/Servientrega
+  // se guardan incrementalmente y únicamente para cruces futuros.
+  if(contactsProbe.empty&&Object.keys(db.contacts||{}).length<=1500)appendMap(true,'contacts',FB.contacts,db.contacts);
+  appendMap(snapProbe.empty,'snapshots',FB.snapshots,db.snapshots);
+  if(ops.length){
+    setCloudStatus(`Firebase: migrando ${ops.length} registros...`,'saving');
+    await commitOps(ops);
+    const migratedOrders=ordersProbe.empty?Object.keys(db.orders||{}).length:0;
+    if(migratedOrders)await publishSyncSignal('bootstrap-bulk','',migratedOrders,Date.now());
+  }
+  return {migrated:ops.length};
+}
+
 async function uploadInitialState(){
   setCloudStatus('Firebase: migrando datos...','saving');
   cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
@@ -1004,7 +1026,95 @@ function targetMapFor(group){
   if(group==='snapshots')return db.snapshots;
   return null;
 }
-function setupCloudListeners(){
+
+async function ensureActiveOrderSchema(){
+  if(!firebaseReady||!fsDB)return {migrated:0};
+  const markerRef=fsDB.collection(FB.sync).doc('schema_v41');
+  try{
+    const marker=await markerRef.get({source:'server'});
+    const md=marker.exists?stripWriteGuard(marker.data()||{}):{};
+    if(Number(md.activeOrderSchema||0)>=ACTIVE_ORDER_SCHEMA)return {migrated:0};
+
+    // Se ejecuta una sola vez para compatibilizar documentos creados por v40 o anteriores.
+    // Después, las sesiones normales solo leen pedidos activos.
+    const snap=await fsDB.collection(FB.orders).get({source:'server'});
+    let migrated=0,batch=fsDB.batch(),n=0;
+    const commits=[];
+    for(const doc of snap.docs){
+      const raw=stripWriteGuard(doc.data()||{});
+      const key=String(raw.guia||decodeURIComponent(doc.id));
+      const active=!(raw._deleted===true||raw._active===false);
+      if(raw._active===active)continue;
+      batch.set(doc.ref,guardedData({guia:key,_active:active}),{merge:true});
+      migrated++;n++;
+      if(n>=400){commits.push(batch.commit());batch=fsDB.batch();n=0}
+    }
+    if(n)commits.push(batch.commit());
+    if(commits.length)await Promise.all(commits);
+    await markerRef.set(guardedData({activeOrderSchema:ACTIVE_ORDER_SCHEMA,migrated,updatedAt:Date.now(),build:APP_BUILD}),{merge:true});
+    return {migrated};
+  }catch(err){
+    console.warn('Active order schema migration',err);
+    // Si la cuota o la red impiden migrar, usamos el listener legado como respaldo.
+    return {migrated:0,error:err};
+  }
+}
+
+async function loadAuxCollectionOnce(group){
+  if(!firebaseReady||auxLoaded[group])return;
+  const collection=group==='contacts'?FB.contacts:group==='snapshots'?FB.snapshots:null;
+  if(!collection)return;
+  try{
+    const snap=await fsDB.collection(collection).get({source:'server'}),target=targetMapFor(group);
+    if(!target)return;
+    snap.forEach(doc=>{
+      const d=stripWriteGuard(doc.data()||{});if(d._deleted)return;
+      const key=String(d.guia||d.socio||d.month||decodeURIComponent(doc.id));
+      target[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d));
+    });
+    auxLoaded[group]=true;localCache();
+  }catch(err){console.warn('Lazy aux read '+group,err)}
+}
+
+async function getCloudDoc(collection,key){
+  try{
+    const doc=await fsDB.collection(collection).doc(safeDocId(key)).get({source:'server'});
+    if(!doc.exists)return null;
+    const d=stripWriteGuard(doc.data()||{});return d._deleted?null:d;
+  }catch(err){console.warn('Targeted source read',collection,key,err);return null}
+}
+
+async function hydrateGuideFromCloudSources(guia){
+  if(!firebaseReady||!db.orders[guia])return false;
+  const o=db.orders[guia],before={...o};
+  if(!db.sources.tc[guia]){const d=await getCloudDoc(FB.tc,guia);if(d){db.sources.tc[guia]=d;cloudFP.tc[guia]=stableJSON(mapPayload('tc',guia,d))}}
+  if(!db.sources.servi[guia]){const d=await getCloudDoc(FB.servi,guia);if(d){db.sources.servi[guia]=d;cloudFP.servi[guia]=stableJSON(mapPayload('servi',guia,d))}}
+  if(!o.celular&&!db.sources.guidePhones[guia]){const d=await getCloudDoc(FB.guidePhones,guia);if(d){db.sources.guidePhones[guia]=d;cloudFP.guidePhones[guia]=stableJSON(mapPayload('guidePhones',guia,d))}}
+  applyTcSource(o);
+  if(!o.celular&&o.socio&&!db.contacts[o.socio]){const d=await getCloudDoc(FB.contacts,o.socio);if(d){db.contacts[o.socio]=d;cloudFP.contacts[o.socio]=stableJSON(mapPayload('contacts',o.socio,d))}}
+  reconcileOrder(o);
+  if(!sameOrder(before,o)){
+    o._syncClient=CLIENT_ID;o._syncAt=Date.now();
+    return true;
+  }
+  return false;
+}
+
+async function hydrateGuidesFromCloudSources(guides){
+  const list=[...new Set((guides||[]).map(String).filter(Boolean))];
+  if(!firebaseReady||!list.length)return [];
+  const changed=[];
+  // Concurrencia limitada: evita ráfagas masivas de lecturas.
+  for(let i=0;i<list.length;i+=12){
+    const chunk=list.slice(i,i+12);
+    const res=await Promise.all(chunk.map(async g=>[g,await hydrateGuideFromCloudSources(g)]));
+    for(const [g,ok] of res)if(ok)changed.push(g);
+  }
+  if(changed.length)localCache();
+  return changed;
+}
+
+function setupCloudListeners({legacyOrders=false}={}){
   if(listenersStarted||!fsDB)return;
   listenersStarted=true;
 
@@ -1020,120 +1130,150 @@ function setupCloudListeners(){
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
   });
 
-  // ORDERS is the primary live source. First snapshot renders the whole table.
-  fsDB.collection(FB.orders).onSnapshot({includeMetadataChanges:true},snap=>{
+  // v41: solo pedidos activos. Los documentos cerrados/tombstones quedan fuera de la consulta
+  // y no vuelven a cobrarse como lectura cada vez que un usuario abre la aplicación.
+  const ordersRef=legacyOrders?fsDB.collection(FB.orders):fsDB.collection(FB.orders).where('_active','==',true);
+  ordersRef.onSnapshot({includeMetadataChanges:true},snap=>{
     try{
       lastOrderListenerAt=Date.now();
-      const before=db.orders||{};
-      const next={...before};
-
-      // Apply every server/cache document. Existing cloud guide wins.
-      snap.forEach(doc=>{
-        const raw=doc.data()||{},d=stripWriteGuard(raw);
-        const key=String(d.guia||decodeURIComponent(doc.id));
-        if(d._deleted){delete next[key];delete cloudFP.orders[key];return}
-        next[key]=d;
-        cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
-      });
-
-      db.orders=next;
+      cloudApplying=true;
+      if(!snap.metadata.fromCache&&!ordersServerSnapshotSeen){
+        const official={};
+        snap.forEach(doc=>{
+          const raw=doc.data()||{},d=stripWriteGuard(raw);
+          const key=String(d.guia||decodeURIComponent(doc.id));
+          if(d._deleted===true||d._active===false){delete cloudFP.orders[key];return}
+          official[key]=d;
+          cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+        });
+        db.orders=official;
+        ordersServerSnapshotSeen=true;
+      }else{
+        const next={...(db.orders||{})};
+        for(const ch of snap.docChanges()){
+          const raw=ch.doc.data()||{},d=stripWriteGuard(raw);
+          const key=String(d.guia||decodeURIComponent(ch.doc.id));
+          if(ch.type==='removed'||d._deleted===true||d._active===false){
+            delete next[key];delete cloudFP.orders[key];
+          }else{
+            next[key]=d;
+            cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+          }
+        }
+        db.orders=next;
+      }
       cloudApplying=false;
       localCache();
 
-      if(!ordersInitialSnapshot){
-        ordersInitialSnapshot=true;
-        renderAll();
-      }else{
+      if(!ordersInitialSnapshot){ordersInitialSnapshot=true;renderAll()}
+      else{
         const p=activePageId();
         if(p==='pedidos')renderOrders();
         else if(p==='infobip')renderInfo();
         else if(p==='dashboard')renderDashboard();
       }
 
-      const n=Object.keys(db.orders||{}).length;
-      if(snap.metadata.fromCache){
-        setCloudStatus(`Firebase: caché · ${n} pedidos`);
-      }else{
-        setCloudStatus(`Firebase: EN VIVO · ${n} pedidos`);
+      if(snap.metadata.fromCache){if(!firebaseServerLive)setCloudStatus('Firebase: caché local')}
+      else{
+        firebaseServerLive=true;
+        setCloudStatus('Firebase: EN VIVO · '+liveTime());
         sessionStorage.removeItem('servi_version_reload_tried');
       }
     }catch(err){
+      cloudApplying=false;
       console.error('Orders snapshot render',err);
       setCloudStatus('Firebase: error de pantalla','error');
     }
   },err=>{
+    cloudApplying=false;
     console.error('Orders listener',err);
+    firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
     toast('Firebase no pudo leer pedidos: '+firebaseErrorText(err));
   });
 
-  const listenAux=(collection,group)=>{
-    fsDB.collection(collection).onSnapshot({includeMetadataChanges:true},snap=>{
-      const target=targetMapFor(group);if(!target)return;
-      let changed=false;
-      for(const ch of snap.docChanges()){
-        const raw=ch.doc.data()||{},d=stripWriteGuard(raw);
-        const key=String(d.guia||d.socio||d.month||decodeURIComponent(ch.doc.id));
-        if(ch.type==='removed'||d._deleted){
-          if(target[key]!==undefined){delete target[key];delete cloudFP[group][key];changed=true}
-        }else{
-          target[key]=d;cloudFP[group][key]=stableJSON(mapPayload(group,key,d));changed=true;
-        }
-      }
-      if(changed){
-        localCache();
-        const p=activePageId();
-        if(group==='contacts'&&p==='infobip')renderInfo();
-        else if(group==='snapshots'&&p==='dashboard')renderDashboard();
-      }
-    },err=>console.error(group+' listener',err));
-  };
-
-  listenAux(FB.contacts,'contacts');
-  listenAux(FB.tc,'tc');
-  listenAux(FB.servi,'servi');
-  listenAux(FB.guidePhones,'guidePhones');
-  listenAux(FB.snapshots,'snapshots');
-
+  // Solo un documento de señalización; no dispara relecturas masivas.
   if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){}
   syncSignalUnsub=fsDB.collection(FB.sync).doc('state').onSnapshot({includeMetadataChanges:true},doc=>{
     if(doc.exists&&!doc.metadata.fromCache)processSyncSignal(stripWriteGuard(doc.data()||{}));
   },err=>console.error('Sync signal listener',err));
 }
+
 async function initFirebase(){
   try{
-    // Always show current browser data immediately.
     renderAll();
-    const localCount=Object.keys(db.orders||{}).length;
-    setCloudStatus(localCount?`Firebase: conectando · ${localCount} locales`:'Firebase: conectando...');
+    firebaseServerLive=false;
+    setCloudStatus('Firebase: conectando');
 
-    saveSafetyBackup(db,'antes_de_firebase_v36');
+    saveSafetyBackup(db,'antes_de_firebase_v41');
 
     if(!window.firebase)throw new Error('Firebase SDK no cargó');
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
 
-    fsDB=firebase.firestore();
+    if(!fsDB)fsDB=firebase.firestore();
+
+    // Firestore 12.x ya autodetecta long-polling. Forzarlo siempre puede degradar
+    // o bloquear algunas redes; dejamos autodetección y un timeout tolerante.
+    if(!firestoreConfigured){
+      fsDB.settings({
+        ignoreUndefinedProperties:true,
+        experimentalAutoDetectLongPolling:true,
+        experimentalLongPollingOptions:{timeoutSeconds:20}
+      });
+      firestoreConfigured=true;
+    }
+
+    // On hosted HTTPS, retain Firestore cache between sessions and share it
+    // between tabs. Failure is non-fatal (private mode / unsupported browser).
+    if(!persistenceAttempted && location.protocol==='https:'){
+      persistenceAttempted=true;
+      try{
+        await fsDB.enablePersistence({synchronizeTabs:true});
+      }catch(e){
+        console.warn('Firestore persistence unavailable',e?.code||e);
+      }
+    }
+
     firebaseReady=true;
-
-    // Important: no fsDB.settings() and no blocking get() calls.
-    // The real-time listener is the only startup path.
-    setupCloudListeners();
-
-    // Ask Firestore to enable its network, but don't block rendering.
     try{await fsDB.enableNetwork()}catch(e){console.warn('enableNetwork',e)}
 
-    // If there is still no snapshot after 8 s, expose the state but keep listening.
-    setTimeout(()=>{
-      if(!ordersInitialSnapshot&&firebaseReady){
-        setCloudStatus('Firebase: esperando respuesta del servidor...','saving');
-      }
-    },8000);
+    // Verificación real contra servidor + migración segura de la primera puesta en línea.
+    try{
+      await Promise.race([
+        bootstrapMissingCloudState(),
+        new Promise((_,reject)=>setTimeout(()=>reject(new Error('server-probe-timeout')),10000))
+      ]);
+      firebaseServerLive=true;
+      setCloudStatus('Firebase: conectado');
+    }catch(e){
+      console.warn('Firebase server/bootstrap probe',e);
+      firebaseServerLive=false;
+      setCloudStatus('Firebase: '+firebaseErrorText(e),'error');
+    }
+
+    // v41: compatibiliza una sola vez los pedidos antiguos y luego escucha únicamente activos.
+    const schemaResult=await ensureActiveOrderSchema();
+    const legacyOrders=!!schemaResult?.error;
+
+    // Los listeners se mantienen incluso si el primer probe falla: cuando la red vuelva,
+    // Firestore reanudará el stream y la interfaz se pondrá al día automáticamente.
+    setupCloudListeners({legacyOrders});
+
+    if(!firebaseServerLive){
+      setTimeout(async()=>{
+        try{
+          await fsDB.disableNetwork();
+          await new Promise(r=>setTimeout(r,350));
+          await fsDB.enableNetwork();
+        }catch(err){console.warn('Network retry',err)}
+      },2500);
+    }
 
   }catch(err){
     console.error('Firebase init',err);
     firebaseReady=false;
+    firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
-    toast('Error Firebase: '+firebaseErrorText(err));
     renderAll();
   }
 }
@@ -1265,18 +1405,18 @@ async function syncExplicitBulkNow(kind,{orderGuides=[],tcGuides=[],serviGuides=
     const ops=[];
     for(const guia of orderGuides){const d=db.orders[guia];if(d)ops.push({type:'set',collection:FB.orders,key:guia,data:mapPayload('orders',guia,d)})}
     for(const guia of deleteOrderGuides)ops.push({type:'delete',collection:FB.orders,key:guia});
-    for(const guia of tcGuides){const d=db.sources.tc[guia];if(d)ops.push({type:'set',collection:FB.tc,key:guia,data:mapPayload('tc',guia,d)})}
-    for(const guia of serviGuides){const d=db.sources.servi[guia];if(d)ops.push({type:'set',collection:FB.servi,key:guia,data:mapPayload('servi',guia,d)})}
+    for(const guia of tcGuides){const d=db.sources.tc[guia];if(d&&!db.orders[guia])ops.push({type:'set',collection:FB.tc,key:guia,data:mapPayload('tc',guia,d)})}
+    for(const guia of serviGuides){const d=db.sources.servi[guia];if(d&&!db.orders[guia])ops.push({type:'set',collection:FB.servi,key:guia,data:mapPayload('servi',guia,d)})}
     for(const socio of contactSocios){const d=db.contacts[socio];if(d)ops.push({type:'set',collection:FB.contacts,key:socio,data:mapPayload('contacts',socio,d)})}
-    for(const guia of guidePhoneGuides){const d=db.sources.guidePhones[guia];if(d)ops.push({type:'set',collection:FB.guidePhones,key:guia,data:mapPayload('guidePhones',guia,d)})}
+    for(const guia of guidePhoneGuides){const d=db.sources.guidePhones[guia];if(d&&!db.orders[guia])ops.push({type:'set',collection:FB.guidePhones,key:guia,data:mapPayload('guidePhones',guia,d)})}
     for(const key of snapshotKeys){const d=db.snapshots[key];if(d)ops.push({type:'set',collection:FB.snapshots,key,data:mapPayload('snapshots',key,d)})}
     if(ops.length)await commitOps(ops);
     for(const guia of orderGuides)if(db.orders[guia])cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,db.orders[guia]));
     for(const guia of deleteOrderGuides)delete cloudFP.orders[guia];
-    for(const guia of tcGuides)if(db.sources.tc[guia])cloudFP.tc[guia]=stableJSON(mapPayload('tc',guia,db.sources.tc[guia]));
-    for(const guia of serviGuides)if(db.sources.servi[guia])cloudFP.servi[guia]=stableJSON(mapPayload('servi',guia,db.sources.servi[guia]));
+    for(const guia of tcGuides)if(db.sources.tc[guia]&&!db.orders[guia])cloudFP.tc[guia]=stableJSON(mapPayload('tc',guia,db.sources.tc[guia]));
+    for(const guia of serviGuides)if(db.sources.servi[guia]&&!db.orders[guia])cloudFP.servi[guia]=stableJSON(mapPayload('servi',guia,db.sources.servi[guia]));
     for(const socio of contactSocios)if(db.contacts[socio])cloudFP.contacts[socio]=stableJSON(mapPayload('contacts',socio,db.contacts[socio]));
-    for(const guia of guidePhoneGuides)if(db.sources.guidePhones[guia])cloudFP.guidePhones[guia]=stableJSON(mapPayload('guidePhones',guia,db.sources.guidePhones[guia]));
+    for(const guia of guidePhoneGuides)if(db.sources.guidePhones[guia]&&!db.orders[guia])cloudFP.guidePhones[guia]=stableJSON(mapPayload('guidePhones',guia,db.sources.guidePhones[guia]));
     for(const key of snapshotKeys)if(db.snapshots[key])cloudFP.snapshots[key]=stableJSON(mapPayload('snapshots',key,db.snapshots[key]));
     localCache();
     await publishSyncSignal(kind+'-bulk','',orderGuides.length+deleteOrderGuides.length,Date.now());
@@ -1307,7 +1447,7 @@ async function syncServiBulkNow(result){
     }
     for(const guia of sources){
       const s=db.sources.servi[guia];
-      if(s)ops.push({type:'set',collection:FB.servi,key:guia,data:mapPayload('servi',guia,s)});
+      if(s&&!db.orders[guia])ops.push({type:'set',collection:FB.servi,key:guia,data:mapPayload('servi',guia,s)});
     }
 
     if(ops.length)await commitOps(ops);
@@ -1319,7 +1459,7 @@ async function syncServiBulkNow(result){
     }
     for(const guia of sources){
       const s=db.sources.servi[guia];
-      if(s)cloudFP.servi[guia]=stableJSON(mapPayload('servi',guia,s));
+      if(s&&!db.orders[guia])cloudFP.servi[guia]=stableJSON(mapPayload('servi',guia,s));
     }
 
     // Publish ONLY after all changed orders have reached Firestore.
@@ -1538,7 +1678,7 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos')renderOrders();else if(b.dataset.page==='infobip')renderInfo();else if(b.dataset.page==='config')renderConfig();else if(b.dataset.page==='dashboard')setTimeout(renderDashboard,20)}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos')renderOrders();else if(b.dataset.page==='infobip')renderInfo();else if(b.dataset.page==='config'){await loadAuxCollectionOnce('contacts');renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders()});['pMonth','pDate','pChannel','pStatus','pServiStatus','pClaim'].forEach(id=>$(id).addEventListener('change',renderOrders));$('pSearch').addEventListener('input',renderOrders);$('copyGuides').addEventListener('click',async()=>{const rows=orderRows(),guias=rows.map(o=>String(o.guia||'').trim()).filter(Boolean);if(!guias.length){toast('No hay guías con estos filtros');return}const text=guias.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(guias.length+' guías copiadas')});
@@ -1588,12 +1728,12 @@ $('gestionText').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key
 
 // Cargas
 $('processNormal').addEventListener('click',async()=>{
-  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal');btn.disabled=true;try{const r=processNormalRows(rows);renderAll();const ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtNormal').value=''}finally{btn.disabled=false}});
+  saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal');btn.disabled=true;try{const r=processNormalRows(rows);const hydrated=await hydrateGuidesFromCloudSources(r.changedGuides);r.changedGuides=[...new Set([...r.changedGuides,...hydrated])];renderAll();const ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});showResult('resNormal',`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtNormal').value=''}finally{btn.disabled=false}});
 $('processServi').addEventListener('click',async()=>{
   saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processServi');btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processServiRows(rows);renderAll();const ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides});showResult('resServi',`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtServi').value=''}finally{btn.disabled=false;btn.textContent='Actualizar status'}});
 $('processTc').addEventListener('click',async()=>{
   saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processTc');btn.disabled=true;try{const r=processTcRows(rows);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`);$('txtTc').value=''}finally{btn.disabled=false}});
-async function processFile(inputId,type,resultId){try{const rows=await rowsFromFile($(inputId));let r,ok=false;if(type==='normal'){r=processNormalRows(rows);renderAll();ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides})}if(type==='servi'){r=processServiRows(rows);renderAll();ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides})}if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`)}catch(e){alert(e.message||e)}}
+async function processFile(inputId,type,resultId){try{const rows=await rowsFromFile($(inputId));let r,ok=false;if(type==='normal'){r=processNormalRows(rows);const hydrated=await hydrateGuidesFromCloudSources(r.changedGuides);r.changedGuides=[...new Set([...r.changedGuides,...hydrated])];renderAll();ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides})}if(type==='servi'){r=processServiRows(rows);renderAll();ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides})}if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':''}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':''}`)}catch(e){alert(e.message||e)}}
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
 // INFOBIP
 ['iMonth','iDate','iOwner','iChannel'].forEach(id=>$(id).addEventListener('change',renderInfo));
@@ -1623,6 +1763,21 @@ $('holidaysList').addEventListener('click',e=>{const b=e.target.closest('[data-h
 $('savePupRule').addEventListener('click',()=>{const days=Math.max(0,Number($('pupDaysConfig').value||0));db.settings=db.settings||{holidays:[],pupDays:1};db.settings.pupDays=days;saveDB();renderAll();toast(`Regla PUP guardada: +${days} día/s`)});
 
 // Respaldo
+$('restoreSafetyBackup')?.addEventListener('click',async()=>{
+  const b=loadSafetyBackup();
+  if(!b||!meaningfulLocal(b.db))return alert('No existe una copia local de seguridad disponible en esta computadora.');
+  const count=Object.keys(b.db.orders||{}).length;
+  if(!confirm(`Se encontró una copia local con ${count} pedidos, guardada ${b.savedAt||''}. ¿Recuperarla y combinarla con Firebase?`))return;
+  try{
+    const currentCloud=normalizeDB(JSON.parse(JSON.stringify(db)));
+    const recovery=unionCloudWithLocal(currentCloud,b.db);
+    db=recovery.db;
+    localCache();
+    renderAll();
+    await restoreMissingLocalToFirebase(recovery);
+    toast('Copia local recuperada sin borrar Firebase');
+  }catch(err){alert(err.message||err)}
+});
 $('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};await syncDBToCloud();await publishSyncSignal('backup-bulk','',Object.keys(db.orders).length,Date.now());renderAll();toast('Respaldo importado y sincronizado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{saveSafetyBackup(db,'antes_de_borrar_pedidos');if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;const deleted=Object.keys(db.orders);db.orders={};saveDB();syncExplicitBulkNow('clear-orders',{deleteOrderGuides:deleted});renderAll();toast('Pedidos abiertos eliminados')});
 $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none');$('socioModal').addEventListener('click',e=>{if(e.target===$('socioModal'))$('socioModal').style.display='none'});
 
@@ -1648,7 +1803,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v38';
+      const bs=$('buildStatus');if(bs)bs.textContent='v41';
     }
   }catch(e){
     console.warn('Build check',e);
@@ -1662,10 +1817,11 @@ setTimeout(checkPublishedBuild,650);
 setInterval(checkPublishedBuild,10000);
 
 renderAll();
-window.addEventListener('pageshow',()=>{checkPublishedBuild();checkSyncStateFromServer()});
-window.addEventListener('online',()=>{try{fsDB?.enableNetwork?.()}catch(e){};if(!fsDB)initFirebase();checkPublishedBuild();checkSyncStateFromServer()});
-window.addEventListener('focus',()=>{checkPublishedBuild();checkSyncStateFromServer()});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){checkPublishedBuild();checkSyncStateFromServer()}});
+window.addEventListener('pageshow',()=>{checkPublishedBuild()});
+window.addEventListener('online',()=>{setCloudStatus('Firebase: reconectando...','saving');try{fsDB?.enableNetwork?.()}catch(e){};if(!fsDB)initFirebase();checkPublishedBuild()});
+window.addEventListener('offline',()=>{firebaseServerLive=false;setCloudStatus('Firebase: sin internet','error')});
+window.addEventListener('focus',()=>{checkPublishedBuild()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){checkPublishedBuild()}});
 initFirebase();
 </script>
 </body>
