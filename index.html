@@ -87,6 +87,20 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 #gestionText{width:100%;min-height:125px;resize:vertical;border:1px solid #B9D7CD;border-radius:9px;padding:10px;font:inherit;line-height:1.4;outline:none}
 #gestionText:focus{border-color:#00A651;box-shadow:0 0 0 3px rgba(0,166,81,.10)}
 
+/* v50: no mostrar una copia local antigua como si fuera la nube oficial */
+.orders-panel{position:relative;min-height:240px}
+.orders-loading-overlay{position:absolute;inset:0;z-index:80;background:rgba(255,255,255,.985);display:flex;align-items:center;justify-content:center;border-radius:12px;color:#315d48;font-size:12px;font-weight:800;letter-spacing:.1px}
+.orders-loading-overlay.hidden{display:none}
+.orders-loading-box{display:flex;align-items:center;gap:9px;padding:12px 16px;border:1px solid #cfe7dc;border-radius:10px;background:#f7fcf9;box-shadow:0 5px 16px rgba(23,33,29,.05)}
+.orders-loading-spin{width:15px;height:15px;border:2px solid #b8ded0;border-top-color:#00A651;border-radius:50%;animation:ordersSpin .8s linear infinite}
+@keyframes ordersSpin{to{transform:rotate(360deg)}}
+.orders-source-notice{display:none;margin:0 0 8px;border:1px solid #e7cf8a;background:#fff8df;color:#69520b;border-radius:9px;padding:8px 11px;font-size:10.5px;font-weight:700}
+.orders-source-notice.show{display:block}
+/* Marca discreta: solo indica que ese campo fue editado manualmente y la fecha */
+.manual-edited{box-shadow:inset 0 0 0 1px rgba(0,166,81,.34);border-radius:5px}
+.manual-edited-input{border-color:#78cda2!important;box-shadow:0 0 0 1px rgba(0,166,81,.15)!important}
+.address-edit-value{display:block;width:100%;min-height:86px;resize:vertical;border:1px solid #B9D7CD;border-radius:8px;padding:9px;font:inherit;line-height:1.4}
+
 
 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}th,td{border-right:1px solid #e8f2ee;border-bottom:1px solid #e8f2ee;padding:5px 7px;text-align:left;white-space:nowrap;height:29px}th{position:sticky;top:0;background:#F3F6F5;z-index:2;font-weight:900}tbody tr:nth-child(odd){background:#FCFDFD}tbody tr:hover{background:#F0F8F4}
 .badge{display:inline-block;border-radius:5px;padding:3px 7px;font-weight:850;font-size:9px;max-width:330px;overflow:hidden;text-overflow:ellipsis}.b-ent{background:#e5f8ee;color:#078b51}.b-route{background:#edf5ff;color:#2d73c9}.b-agency{background:#E4F4F6;color:#157A83}.b-return{background:#f2edff;color:#6f4fd0}.b-pend{background:#fff4df;color:#c17a00}.b-neutral{background:#eff3f2;color:#62706b}
@@ -163,13 +177,15 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v49</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v50</span></div>
 </aside>
 
 <main class="main">
 <section id="pedidos" class="page active">
   <div class="page-head"><h1>Pedidos</h1><button class="btn btn-green" id="exportOrders">⬇ Excel</button></div>
-  <div class="panel">
+  <div id="ordersSourceNotice" class="orders-source-notice"></div>
+  <div class="panel orders-panel">
+    <div id="ordersLoadingOverlay" class="orders-loading-overlay"><div class="orders-loading-box"><span class="orders-loading-spin"></span><span>Cargando datos de Firebase…</span></div></div>
     <div class="tabs-owners" id="ownerTabs"></div>
     <div class="toolbar">
       <div class="field"><label>Mes</label><select id="pMonth"></select></div>
@@ -476,6 +492,18 @@ TESTSYNC202609..." style="width:100%;min-height:120px;resize:vertical;border:1px
     <div class="modal-actions"><button class="btn" id="cancelDeliveryEdit">Cancelar</button><button class="btn btn-green" id="saveDeliveryEdit">Guardar</button></div>
   </div>
 </div>
+<div class="modal-bg" id="addressEditModal">
+  <div class="modal">
+    <h3>Editar dirección</h3>
+    <div id="addressEditMeta" style="font-size:11px;color:#607069;margin-bottom:10px"></div>
+    <input type="hidden" id="addressEditGuide">
+    <div class="field">
+      <label>Dirección</label>
+      <textarea id="addressEditValue" class="address-edit-value" placeholder="Escribe la dirección corregida..."></textarea>
+    </div>
+    <div class="modal-actions"><button class="btn" id="cancelAddressEdit">Cancelar</button><button class="btn btn-green" id="saveAddressEdit">Guardar</button></div>
+  </div>
+</div>
 <div class="modal-bg" id="dailyOrdersModal">
   <div class="modal daily-orders-modal">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -541,7 +569,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v49.20260908.1';
+const APP_BUILD='v50.20260909.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -560,6 +588,7 @@ let remotePulseTimer=null;
 
 let syncChannel=null,fsDB=null,firebaseReady=false,cloudApplying=false,cloudSyncTimer=null,cloudSyncRunning=false;
 let lastSyncNonce='',syncSignalUnsub=null,lastServerSyncCheck=0,lastOrderListenerAt=0,cloudStatusTimer=null,listenersStarted=false,ordersInitialSnapshot=false,ordersServerSnapshotSeen=false,firestoreConfigured=false,persistenceAttempted=false,firebaseServerLive=false;
+let ordersSourceState='loading',ordersFallbackTimer=null;
 const ACTIVE_ORDER_SCHEMA=1;
 const auxLoaded={contacts:false,snapshots:false};
 let cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};
@@ -589,6 +618,27 @@ function firebaseErrorText(err){
 }
 
 function localCache(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(db))}catch(e){}}
+
+function localISODate(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function editedFieldDate(o,field){return String(o?._editedFields?.[field]||'')}
+function editedFieldTitle(o,field){const x=editedFieldDate(o,field);return x?`Editado · ${displayDate(x)}`:''}
+function editedFieldClass(o,field,input=false){return editedFieldDate(o,field)?(input?' manual-edited-input':' manual-edited'):''}
+function markEditedFields(o,fields){const next={...(o?._editedFields||{})},today=localISODate();for(const f of fields||[])if(f)next[f]=today;return next}
+function setOrdersSourceState(state){
+  ordersSourceState=state;
+  const overlay=$('ordersLoadingOverlay'),notice=$('ordersSourceNotice');
+  if(overlay)overlay.classList.toggle('hidden',state!=='loading');
+  if(notice){
+    if(state==='local'){notice.textContent='Modo local · datos pendientes de validar con Firebase';notice.classList.add('show')}
+    else{notice.textContent='';notice.classList.remove('show')}
+  }
+}
+function scheduleOrdersLocalFallback(){
+  clearTimeout(ordersFallbackTimer);
+  ordersFallbackTimer=setTimeout(()=>{
+    if(!ordersServerSnapshotSeen){setOrdersSourceState('local');renderAll()}
+  },9000);
+}
 
 function saveSafetyBackup(source,label='auto'){
   try{
@@ -1273,6 +1323,8 @@ function setupCloudListeners({legacyOrders=false}={}){
         });
         db.orders=official;
         ordersServerSnapshotSeen=true;
+        clearTimeout(ordersFallbackTimer);
+        setOrdersSourceState('server');
       }else{
         const next={...(db.orders||{})};
         for(const ch of snap.docChanges()){
@@ -1301,6 +1353,7 @@ function setupCloudListeners({legacyOrders=false}={}){
       if(snap.metadata.fromCache){if(!firebaseServerLive)setCloudStatus('Firebase: caché local')}
       else{
         firebaseServerLive=true;
+        if(!ordersServerSnapshotSeen){ordersServerSnapshotSeen=true;clearTimeout(ordersFallbackTimer);setOrdersSourceState('server')}
         setCloudStatus('Firebase: EN VIVO · '+liveTime());
         sessionStorage.removeItem('servi_version_reload_tried');
       }
@@ -1314,6 +1367,8 @@ function setupCloudListeners({legacyOrders=false}={}){
     console.error('Orders listener',err);
     firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    setOrdersSourceState('local');
+    renderAll();
     toast('Firebase no pudo leer pedidos: '+firebaseErrorText(err));
   });
 
@@ -1326,11 +1381,13 @@ function setupCloudListeners({legacyOrders=false}={}){
 
 async function initFirebase(){
   try{
+    setOrdersSourceState('loading');
+    scheduleOrdersLocalFallback();
     renderAll();
     firebaseServerLive=false;
     setCloudStatus('Firebase: conectando');
 
-    saveSafetyBackup(db,'antes_de_firebase_v48');
+    saveSafetyBackup(db,'antes_de_firebase_v50');
 
     if(!window.firebase)throw new Error('Firebase SDK no cargó');
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -1399,6 +1456,7 @@ async function initFirebase(){
     firebaseReady=false;
     firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    setOrdersSourceState('local');
     renderAll();
   }
 }
@@ -1493,10 +1551,12 @@ function processNormalRows(rows){
     const old=db.orders[guia]||{};
     const cod=String(getObjValue(r,['COD DISTR.','COD DISTR','COD_DISTR','SERVICE_CENTRE'])||old.codDistr||'').trim();
     const directCell=cleanPhone(getObjValue(r,['CELULAR','CELULAR13','TELEFONO_SOCIO']));
+    const incomingAddress=String(getObjValue(r,['DIRECCION ENVIO','DIRECCIÓN ENVIO','DIRECCION ENVÍO','DIRECCIÓN ENVÍO','DIRECCION DE ENVIO','DIRECCIÓN DE ENVÍO','DIRECCION_ENVIO','DIRECCION','DIRECCIÓN','DIRECCIÒN','ADDRESS_LINE_1'])||'').trim();
+    const keepManualAddress=!!old?._editedFields?.direccion;
     const o={...old,guia,
       fechaGuia:isoOriflameDate(oriflameRawDate(r)||old.fechaGuia,dateMode),codDistr:cod,
       destinatario:String(getObjValue(r,['NOMBRE DESTINATARIO','NOMBRE_DESTINATARIO','SERVICE_CENTRE_NAME'])||old.destinatario||'').trim(),
-      direccion:String(getObjValue(r,['DIRECCION ENVIO','DIRECCIÓN ENVIO','DIRECCION ENVÍO','DIRECCIÓN ENVÍO','DIRECCION DE ENVIO','DIRECCIÓN DE ENVÍO','DIRECCION_ENVIO','DIRECCION','DIRECCIÓN','DIRECCIÒN','ADDRESS_LINE_1'])||old.direccion||'').trim(),
+      direccion:keepManualAddress?(old.direccion||''):(incomingAddress||old.direccion||''),
       barrio:String(getObjValue(r,['BARRIO','ADDRESS_LINE_2'])||old.barrio||'').trim(),telefono1:cleanPhone(getObjValue(r,['TELEFONO 1','TELEFONO_1','TELEFONO'])||old.telefono1),telefono2:cleanPhone(getObjValue(r,['TELEFONO 2','TELEFONO_2'])||old.telefono2),
       numeroOrden:String(getObjValue(r,['NUMERO DE ORDEN','NUMERO_DE_ORDEN','INVO_NUMBER'])||old.numeroOrden||'').trim(),orderDate:isoOriflameDate(getObjValue(r,['ORDER DATE','ORDER_DATE'])||old.orderDate,dateMode),
       ciudad:String(getObjValue(r,['CIUDAD','CITY','ADDRESS_LINE_3'])||old.ciudad||'').trim(),provincia:String(getObjValue(r,['PROVINCIA','CITY_1'])||old.provincia||'').trim(),
@@ -1750,7 +1810,13 @@ function renderOwnerTabs(){const own=db.owners.filter(o=>o.active).map(o=>o.name
 function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(daysSort){const getD=o=>isDelivered(o)?workdaysDiff(o.fechaGuia,o.fechaEntrega):null;rows.sort((a,b)=>{const da=getD(a),dbb=getD(b);if(da==null&&dbb==null)return String(a.guia).localeCompare(String(b.guia));if(da==null)return 1;if(dbb==null)return-1;const diff=daysSort==='desc'?dbb-da:da-dbb;return diff||String(a.guia).localeCompare(String(b.guia))})}else{rows.sort((a,b)=>String(b.fechaGuia||'').localeCompare(String(a.fechaGuia||''))||String(b.guia||'').localeCompare(String(a.guia||'')))}return rows}
 function claimOptions(selected=''){return'<option value=""></option>'+db.claims.map(c=>`<option value="${escapeHtml(c.name)}" ${c.name===selected?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
 function syncOrdersHScroll(){const wrap=$('ordersScrollWrap'),bar=$('ordersHScroll'),inner=$('ordersHScrollInner'),table=$('ordersTable');if(!wrap||!bar||!inner||!table)return;requestAnimationFrame(()=>{inner.style.width=Math.max(table.scrollWidth,wrap.clientWidth)+'px';bar.scrollLeft=wrap.scrollLeft});wrap.onscroll=()=>{if(Math.abs(bar.scrollLeft-wrap.scrollLeft)>1)bar.scrollLeft=wrap.scrollLeft};bar.onscroll=()=>{if(Math.abs(wrap.scrollLeft-bar.scrollLeft)>1)wrap.scrollLeft=bar.scrollLeft}}
-function renderOrders(){ensureServiStatusOptions();renderOwnerTabs();const rows=orderRows();const showOwner=activeOwner==='TODOS'||activeOwner==='SIN ASIGNACIÓN';$('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th>FECHA GUIA</th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>GESTIÓN</th><th>FECHA ENTREGA</th><th class="sort-days ${daysSort?'active':''}" data-sort-days title="Ordenar por días">DÍAS <span class="sort-arrow">${daysSort==='desc'?'↓':daysSort==='asc'?'↑':'↕'}</span></th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>`<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatario||o.nombreSocio||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td>${escapeHtml(o.direccion||'')}</td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td>${escapeHtml(displayDate(o.fechaEntrega))}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable" style="width:180px" data-edit="${o.guia}" data-field="clasificacion">${claimOptions(o.clasificacion||'')}</select></td></tr>`).join('')}</tbody>`;syncOrdersHScroll()}
+function renderOrders(){
+  ensureServiStatusOptions();renderOwnerTabs();const rows=orderRows();const showOwner=activeOwner==='TODOS'||activeOwner==='SIN ASIGNACIÓN';
+  $('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th>FECHA GUIA</th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>GESTIÓN</th><th>FECHA ENTREGA</th><th class="sort-days ${daysSort?'active':''}" data-sort-days title="Ordenar por días">DÍAS <span class="sort-arrow">${daysSort==='desc'?'↓':daysSort==='asc'?'↑':'↕'}</span></th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>{
+    const addrTitle=editedFieldTitle(o,'direccion'),phoneTitle=editedFieldTitle(o,'celular'),statusTitle=editedFieldTitle(o,'status'),gestionTitle=editedFieldTitle(o,'gestion'),claimTitle=editedFieldTitle(o,'clasificacion');
+    return `<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatario||o.nombreSocio||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td class="${editedFieldClass(o,'direccion')}" title="${escapeHtml(addrTitle)}"><div class="field-edit-wrap"><span>${escapeHtml(o.direccion||'')}</span><button class="mini-edit" data-edit-address="${escapeHtml(o.guia)}" title="Editar dirección"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable${editedFieldClass(o,'celular',true)}" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable" title="${escapeHtml(phoneTitle)}"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td class="${editedFieldClass(o,'status')}" title="${escapeHtml(statusTitle)}"><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(statusTitle||o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell ${editedFieldClass(o,'gestion')}" title="${escapeHtml(gestionTitle)}"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td class="${editedFieldClass(o,'fechaEntrega')}" title="${escapeHtml(editedFieldTitle(o,'fechaEntrega'))}">${escapeHtml(displayDate(o.fechaEntrega))}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable${editedFieldClass(o,'clasificacion',true)}" style="width:180px" data-edit="${o.guia}" data-field="clasificacion" title="${escapeHtml(claimTitle)}">${claimOptions(o.clasificacion||'')}</select></td></tr>`
+  }).join('')}</tbody>`;syncOrdersHScroll()
+}
 function startsIngresandoAgencia(status){return N(status).startsWith('INGRESANDO EN AGENCIA')}
 function infoMessage(o){const resp=ownerPhone(o.responsable);if(!o.socio)return{type:'Sin socio',ready:false,line:''};if(!o.celular)return{type:'Sin celular',ready:false,line:''};if(!resp)return{type:'Sin WhatsApp responsable',ready:false,line:''};if(startsIngresandoAgencia(o.status))return{type:'Retiro agencia',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} esta en agencia ${o.status} favor retirar,Whatsapp${resp}`};return{type:'General 48–72h',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} llegara en 48a72h estar pendiente Whatsapp${resp}`}}
 function infoRows(){const m=$('iMonth').value,d=$('iDate').value,own=$('iOwner').value,c=$('iChannel').value;return Object.values(db.orders).filter(o=>!isDelivered(o)&&['PUP','HD'].includes(o.canal)&&(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!own||o.responsable===own)&&(!c||o.canal===c)).map(o=>({...o,_msg:infoMessage(o)}))}
@@ -1886,12 +1952,15 @@ $('ordersScrollWrap')?.addEventListener('scroll',hideGestionTip);
 window.addEventListener('scroll',hideGestionTip,true);
 window.addEventListener('resize',hideGestionTip);
 
-$('ordersTable').addEventListener('click',e=>{const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';renderOrders();return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=isoDate(o.fechaEntrega)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio];$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Socio</dt><dd>${escapeHtml(o.socio||'')}</dd><dt>Nombre</dt><dd>${escapeHtml(o.nombreSocio||'')}</dd><dt>Celular</dt><dd>${escapeHtml(o.celular||'')}</dd><dt>Responsable</dt><dd>${escapeHtml(o.responsable||'')}</dd><dt>Referencia</dt><dd>${escapeHtml(o.referencia||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;updateOrderLive(guia,{responsable:owner,manualResponsable:true});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={};if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatario||o.nombreSocio||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':displayDate(o.fechaEntrega),'DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
-$('saveDeliveryEdit').addEventListener('click',()=>{const guia=$('deliveryEditGuide').value,o=db.orders[guia];if(!o)return;const status=$('deliveryEditStatus').value.trim(),fecha=isoDate($('deliveryEditDate').value),manualDeliveryAt=new Date().toISOString(),lockedDelivered=isDeliveredStatus(status);$('deliveryEditModal').style.display='none';updateOrderLive(guia,{status,fechaEntrega:fecha,manualDelivery:true,manualDeliveryAt,lockedDelivered});toast('Entrega actualizada')});
+$('ordersTable').addEventListener('click',e=>{const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';renderOrders();return}const abtn=e.target.closest('[data-edit-address]');if(abtn){const o=db.orders[abtn.dataset.editAddress];if(!o)return;$('addressEditGuide').value=o.guia;$('addressEditValue').value=o.direccion||'';$('addressEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('addressEditModal').style.display='flex';setTimeout(()=>$('addressEditValue').focus(),20);return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=isoDate(o.fechaEntrega)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio];$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Socio</dt><dd>${escapeHtml(o.socio||'')}</dd><dt>Nombre</dt><dd>${escapeHtml(o.nombreSocio||'')}</dd><dt>Celular</dt><dd>${escapeHtml(o.celular||'')}</dd><dt>Responsable</dt><dd>${escapeHtml(o.responsable||'')}</dd><dt>Referencia</dt><dd>${escapeHtml(o.referencia||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;o._editedFields=markEditedFields(o,['responsable']);updateOrderLive(guia,{responsable:owner,manualResponsable:true,_editedFields:o._editedFields});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={},before=String(o?.[field]??'');if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}if(String(o?.[field]??'')!==before){o._editedFields=markEditedFields(o,[field]);patch._editedFields=o._editedFields}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatario||o.nombreSocio||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':displayDate(o.fechaEntrega),'DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
+$('saveDeliveryEdit').addEventListener('click',()=>{const guia=$('deliveryEditGuide').value,o=db.orders[guia];if(!o)return;const status=$('deliveryEditStatus').value.trim(),fecha=isoDate($('deliveryEditDate').value),manualDeliveryAt=new Date().toISOString(),lockedDelivered=isDeliveredStatus(status),edited=[];if(status!==String(o.status||''))edited.push('status');if(fecha!==String(o.fechaEntrega||''))edited.push('fechaEntrega');const patch={status,fechaEntrega:fecha,manualDelivery:true,manualDeliveryAt,lockedDelivered};if(edited.length){o._editedFields=markEditedFields(o,edited);patch._editedFields=o._editedFields}$('deliveryEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Entrega actualizada')});
+$('saveAddressEdit').addEventListener('click',()=>{const guia=$('addressEditGuide').value,o=db.orders[guia];if(!o)return;const direccion=$('addressEditValue').value.trim(),patch={direccion};if(direccion!==String(o.direccion||'')){o._editedFields=markEditedFields(o,['direccion']);patch._editedFields=o._editedFields}$('addressEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Dirección actualizada')});
+$('cancelAddressEdit').addEventListener('click',()=>$('addressEditModal').style.display='none');
+$('addressEditModal').addEventListener('click',e=>{if(e.target===$('addressEditModal'))$('addressEditModal').style.display='none'});
 $('cancelDeliveryEdit').addEventListener('click',()=>$('deliveryEditModal').style.display='none');
 $('deliveryEditModal').addEventListener('click',e=>{if(e.target===$('deliveryEditModal'))$('deliveryEditModal').style.display='none'});
 
-$('saveGestion').addEventListener('click',()=>{const guia=$('gestionGuide').value,o=db.orders[guia];if(!o)return;const gestion=$('gestionText').value.trim();$('gestionModal').style.display='none';updateOrderLive(guia,{gestion});toast(gestion?'Gestión guardada':'Gestión eliminada')});
+$('saveGestion').addEventListener('click',()=>{const guia=$('gestionGuide').value,o=db.orders[guia];if(!o)return;const gestion=$('gestionText').value.trim(),patch={gestion};if(gestion!==String(o.gestion||'')){o._editedFields=markEditedFields(o,['gestion']);patch._editedFields=o._editedFields}$('gestionModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast(gestion?'Gestión guardada':'Gestión eliminada')});
 $('cancelGestion').addEventListener('click',()=>$('gestionModal').style.display='none');
 $('gestionModal').addEventListener('click',e=>{if(e.target===$('gestionModal'))$('gestionModal').style.display='none'});
 $('gestionText').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')$('saveGestion').click()});
@@ -1901,7 +1970,7 @@ $('processNormal').addEventListener('click',async()=>{
   saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';
   try{
     const r=processNormalRows(rows);
-    // v48: la base aparece INMEDIATAMENTE y la fecha Oriflame se autodetecta por cada carga.
+    // v50: la fecha Oriflame se autodetecta y las correcciones manuales de dirección se conservan.
     renderAll();
     let ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
     let hydrated=[];
@@ -2196,7 +2265,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v49';
+      const bs=$('buildStatus');if(bs)bs.textContent='v50';
     }
   }catch(e){
     console.warn('Build check',e);
