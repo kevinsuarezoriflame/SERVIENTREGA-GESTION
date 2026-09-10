@@ -105,10 +105,10 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}th,td{border-right:1px solid #e8f2ee;border-bottom:1px solid #e8f2ee;padding:5px 7px;text-align:left;white-space:nowrap;height:29px}th{position:sticky;top:0;background:#F3F6F5;z-index:2;font-weight:900}tbody tr:nth-child(odd){background:#FCFDFD}tbody tr:hover{background:#F0F8F4}
 .badge{display:inline-block;border-radius:5px;padding:3px 7px;font-weight:850;font-size:9px;max-width:330px;overflow:hidden;text-overflow:ellipsis}.b-ent{background:#e5f8ee;color:#078b51}.b-route{background:#edf5ff;color:#2d73c9}.b-agency{background:#E4F4F6;color:#157A83}.b-return{background:#f2edff;color:#6f4fd0}.b-pend{background:#fff4df;color:#c17a00}.b-neutral{background:#eff3f2;color:#62706b}
 .socio-btn{height:22px;border:1px solid #d5b63e;background:#fff7bf;border-radius:999px;padding:0 8px;font-size:9px;font-weight:900;margin-left:5px}.editable{height:23px;border:1px solid #bfd5cd;border-radius:6px;padding:0 6px;font-size:10px;background:#fff}
-.sort-days{cursor:pointer;user-select:none;white-space:nowrap}
-.sort-days:hover{background:#EAF5F0!important;color:#006F36}
-.sort-days .sort-arrow{display:inline-block;margin-left:4px;font-size:10px;opacity:.52}
-.sort-days.active .sort-arrow{opacity:1;color:#00A651}
+.sort-days,.sort-date{cursor:pointer;user-select:none;white-space:nowrap}
+.sort-days:hover,.sort-date:hover{background:#EAF5F0!important;color:#006F36}
+.sort-days .sort-arrow,.sort-date .sort-arrow{display:inline-block;margin-left:4px;font-size:10px;opacity:.52}
+.sort-days.active .sort-arrow,.sort-date.active .sort-arrow{opacity:1;color:#00A651}
 
 .monthbar{display:flex;gap:8px;align-items:end;flex-wrap:wrap;padding:10px;margin-bottom:10px}.monthbar .status{margin-left:auto;font-size:10px;font-weight:850;color:var(--deep);padding:7px 10px;border-radius:999px;background:var(--mint2);border:1px solid #b7dccf}
 .paste-grid{display:grid;grid-template-columns:205px 1fr;gap:10px}.paste-menu{padding:10px}.paste-menu button{display:block;width:100%;text-align:left;border:0;background:#f1f7f4;margin-bottom:7px;padding:10px;border-radius:8px;font-weight:850}.paste-menu button.active{background:var(--mint2);color:var(--deep);border:1px solid #a9d5c5}.paste-card{padding:14px}.paste-card h3{margin:0 0 10px}.paste-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.paste-card textarea{width:100%;height:300px;border:1px solid #b9d7cd;border-radius:10px;padding:9px;font-family:Consolas,monospace;font-size:10px;resize:vertical}.file-row{display:flex;gap:8px;align-items:center;margin:8px 0}.file-row input[type=file]{max-width:320px;font-size:11px}.result-box{margin-top:9px;border:1px dashed #9FD4C5;border-radius:10px;padding:8px;background:#fff;display:none;font-size:11px;color:#0b3f32}
@@ -177,7 +177,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v50</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v52</span></div>
 </aside>
 
 <main class="main">
@@ -193,7 +193,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
       <div class="field"><label>Canal</label><select id="pChannel"><option value="">Todos</option><option>PUP</option><option>HD</option><option>SPO</option></select></div>
       <div class="field"><label>Estado</label><select id="pStatus"><option value="">Todos</option><option value="pending">No entregados</option><option value="delivered">Entregados</option></select></div>
       <button class="btn btn-green" id="copyGuides" title="Copiar únicamente las guías de la vista actual">📋 Copiar guías</button>
-      <div class="field"><label>Status Servientrega</label><select id="pServiStatus"><option value="">Todos</option></select></div>
+      <div class="field"><label>Status Servientrega</label><input id="pServiStatus" list="pServiStatusList" placeholder="Escribe para filtrar..."><datalist id="pServiStatusList"></datalist></div>
       <div class="field"><label>Claim</label><select id="pClaim"></select></div>
       <div class="field search"><label>Buscar</label><input id="pSearch" placeholder="Guía, socio, destinatario..."></div>
       <button class="btn" id="clearFilters">Limpiar</button>
@@ -558,7 +558,7 @@ const LOCALIDAD_PROV={
 function freshDB(){return{version:27,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}}}}
 function normalizeDB(x){x=x||freshDB();x.version=27;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
-let db=loadDB(),activeOwner='TODOS',daysSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
+let db=loadDB(),activeOwner='TODOS',daysSort='',dateSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
 const $=id=>document.getElementById(id);
 
 const FIREBASE_CONFIG={
@@ -569,7 +569,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v50.20260909.1';
+const APP_BUILD='v52.20260910.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1531,10 +1531,10 @@ function isOffice(o){return o.canal==='PUP'||/OF\.\s*SERVIENTREGA|OFICINA|AGENCI
 function registerContact(socio,phone,source='TC'){socio=String(socio??'').trim();phone=cleanPhone(phone);if(!socio||!phone)return false;const prev=db.contacts[socio];if(prev&&prev.phone===phone)return false;db.contacts[socio]={socio,phone,updated:new Date().toISOString().slice(0,10),source};return true}
 function rememberGuidePhone(guia,phone,source='Histórico'){guia=String(guia??'').trim();phone=cleanPhone(phone);if(!guia||!phone)return false;const prev=db.sources.guidePhones[guia];if(prev&&prev.phone===phone)return false;db.sources.guidePhones[guia]={guia,phone,source,updatedAt:new Date().toISOString()};return true}
 function sameFields(a,b,keys){return keys.every(k=>String(a?.[k]??'')===String(b?.[k]??''))}
-function sameOrder(a,b){const keys=['guia','fechaGuia','codDistr','destinatario','direccion','barrio','telefono1','telefono2','numeroOrden','orderDate','ciudad','provincia','peso','bultos','promesa','socio','nombreSocio','referencia','celular','status','fechaEntrega','clasificacion','gestion','manualDelivery','manualDeliveryAt','lockedDelivered','canal','responsable','manualResponsable'];return sameFields(a,b,keys)}
+function sameOrder(a,b){const keys=['guia','fechaGuia','codDistr','destinatario','destinatarioOrigen','direccion','barrio','telefono1','telefono2','numeroOrden','orderDate','ciudad','provincia','peso','bultos','promesa','socio','nombreSocio','referencia','celular','tcSocio','tcNombreSocio','tcCelular','tcReferencia','status','fechaEntrega','clasificacion','gestion','manualDelivery','manualDeliveryAt','lockedDelivered','canal','responsable','manualResponsable'];return sameFields(a,b,keys)}
 function hydrateContact(o){if(!o.celular&&o.guia&&db.sources.guidePhones[o.guia]?.phone)o.celular=db.sources.guidePhones[o.guia].phone;if(!o.celular&&o.socio&&db.contacts[o.socio])o.celular=db.contacts[o.socio].phone;if(o.celular&&o.guia)rememberGuidePhone(o.guia,o.celular,'Pedido')}
 function applyTcSource(o){const s=db.sources.tc[o.guia];if(!s)return;if(s.socio)o.socio=s.socio;if(s.nombre)o.nombreSocio=s.nombre;if(s.referencia)o.referencia=s.referencia;if(s.phone)o.celular=s.phone}
-function applyServiSource(o){const s=db.sources.servi[o.guia];if(!s||isDelivered(o)||(o.manualDelivery&&o.lockedDelivered))return;if(s.status)o.status=s.status;if(s.fechaEntrega)o.fechaEntrega=s.fechaEntrega;if(isDeliveredStatus(o.status))o.lockedDelivered=true}
+function applyServiSource(o){const s=db.sources.servi[o.guia];if(!s||isDelivered(o)||(o.manualDelivery&&o.lockedDelivered))return;if(s.status)o.status=s.status;o.fechaEntrega=isDeliveredStatus(o.status)?(s.fechaEntrega||''):'';if(isDeliveredStatus(o.status))o.lockedDelivered=true}
 function reconcileOrder(o){if(!o)return o;applyTcSource(o);applyServiSource(o);hydrateContact(o);if(o.socio&&db.contacts[o.socio]?.phone&&!o.celular)o.celular=db.contacts[o.socio].phone;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Reconciliación');return o}
 function reconcileAll(doSave=true){for(const o of Object.values(db.orders))reconcileOrder(o);if(doSave)saveDB()}
 function getObjValue(obj,aliases){const entries=Object.keys(obj||{}).map(k=>({raw:k,key:canonHeader(k),value:obj[k]}));const nonEmpty=v=>v!==null&&v!==undefined&&String(v).trim()!=='';for(const a of aliases){const key=canonHeader(a);const hit=entries.find(e=>e.key===key&&nonEmpty(e.value));if(hit)return hit.value}for(const a of aliases){const key=canonHeader(a);if(key.length<7)continue;const hit=entries.find(e=>nonEmpty(e.value)&&(e.key.startsWith(key)||key.startsWith(e.key)));if(hit)return hit.value}for(const a of aliases){const key=canonHeader(a);const hit=entries.find(e=>e.key===key);if(hit)return hit.value}return''}
@@ -1551,11 +1551,13 @@ function processNormalRows(rows){
     const old=db.orders[guia]||{};
     const cod=String(getObjValue(r,['COD DISTR.','COD DISTR','COD_DISTR','SERVICE_CENTRE'])||old.codDistr||'').trim();
     const directCell=cleanPhone(getObjValue(r,['CELULAR','CELULAR13','TELEFONO_SOCIO']));
+    const incomingDestinatario=String(getObjValue(r,['NOMBRE DESTINATARIO','NOMBRE_DESTINATARIO','SERVICE_CENTRE_NAME'])||'').trim();
     const incomingAddress=String(getObjValue(r,['DIRECCION ENVIO','DIRECCIÓN ENVIO','DIRECCION ENVÍO','DIRECCIÓN ENVÍO','DIRECCION DE ENVIO','DIRECCIÓN DE ENVÍO','DIRECCION_ENVIO','DIRECCION','DIRECCIÓN','DIRECCIÒN','ADDRESS_LINE_1'])||'').trim();
     const keepManualAddress=!!old?._editedFields?.direccion;
     const o={...old,guia,
       fechaGuia:isoOriflameDate(oriflameRawDate(r)||old.fechaGuia,dateMode),codDistr:cod,
-      destinatario:String(getObjValue(r,['NOMBRE DESTINATARIO','NOMBRE_DESTINATARIO','SERVICE_CENTRE_NAME'])||old.destinatario||'').trim(),
+      destinatarioOrigen:incomingDestinatario||old.destinatarioOrigen||old.destinatario||'',
+      destinatario:incomingDestinatario||old.destinatarioOrigen||old.destinatario||'',
       direccion:keepManualAddress?(old.direccion||''):(incomingAddress||old.direccion||''),
       barrio:String(getObjValue(r,['BARRIO','ADDRESS_LINE_2'])||old.barrio||'').trim(),telefono1:cleanPhone(getObjValue(r,['TELEFONO 1','TELEFONO_1','TELEFONO'])||old.telefono1),telefono2:cleanPhone(getObjValue(r,['TELEFONO 2','TELEFONO_2'])||old.telefono2),
       numeroOrden:String(getObjValue(r,['NUMERO DE ORDEN','NUMERO_DE_ORDEN','INVO_NUMBER'])||old.numeroOrden||'').trim(),orderDate:isoOriflameDate(getObjValue(r,['ORDER DATE','ORDER_DATE'])||old.orderDate,dateMode),
@@ -1584,7 +1586,8 @@ function processServiRows(rows){
     const st=String(getObjValue(r,['motivo','MOTIVO','status','estado'])).trim();
     const fe=isoDate(getObjValue(r,['fecha_entrega','FECHA ENTREGA','FECHA_ENTREGA']));
     const prev=db.sources.servi[guia]||{};
-    const next={guia,status:st||prev.status||'',fechaEntrega:fe||prev.fechaEntrega||''};
+    const effectiveStatus=st||prev.status||'';
+    const next={guia,status:effectiveStatus,fechaEntrega:isDeliveredStatus(effectiveStatus)?(fe||prev.fechaEntrega||''):''};
     const sourceChanged=!sameFields(prev,next,['guia','status','fechaEntrega']);
     if(sourceChanged){
       db.sources.servi[guia]={...next,updatedAt:new Date().toISOString()};
@@ -1715,17 +1718,53 @@ function processTcRows(rows){
   const touchedSocios=new Set(),sourceGuides=new Set(),changedGuides=new Set(),guidePhoneGuides=new Set();
   for(const r of rows){
     const courier=N(getObjValue(r,['COURIER']));if(courier&&courier.includes('SERVIENTREGA'))serviRows++;
-    const guia=String(getObjValue(r,['WAYBILL_NUMBER','GUIA'])).trim(),socio=String(getObjValue(r,['SOCIO'])).trim(),nombre=String(getObjValue(r,['NOMBRE_SOCIO'])).trim(),phone=cleanPhone(getObjValue(r,['TELEFONO_SOCIO'])),ref=String(getObjValue(r,['REFERENCIAS'])).trim();
+    const guia=String(getObjValue(r,['WAYBILL_NUMBER','GUIA','NO GUIA','NO_GUIA'])).trim(),
+          socio=String(getObjValue(r,['SOCIO','CODIGO11','CODIGO SOCIO','CODIGO_SOCIO','COD SOCIO'])).trim(),
+          nombre=String(getObjValue(r,['NOMBRE_SOCIO','NOMBRE SOCIO','NOMBRE12','SOCIO_NOMBRE','NOMBRE DEL SOCIO'])).trim(),
+          phone=cleanPhone(getObjValue(r,['TELEFONO_SOCIO','CELULAR13','CELULAR SOCIO','CELULAR','TELEFONO'])),
+          ref=String(getObjValue(r,['REFERENCIAS','REFERENCIA23','REFERENCIA'])).trim();
     if(socio&&phone){const had=db.contacts[socio]?.phone,changed=registerContact(socio,phone,'TC');if(changed){touchedSocios.add(socio);if(had)masterUpdated++;else masterAdded++}}
     if(!guia)continue;
     const prev=db.sources.tc[guia]||{},next={guia,socio:socio||prev.socio||'',nombre:nombre||prev.nombre||'',phone:phone||prev.phone||'',referencia:ref||prev.referencia||''};
     const sourceChanged=!sameFields(prev,next,['guia','socio','nombre','phone','referencia']);
     if(sourceChanged){db.sources.tc[guia]={...next,updatedAt:new Date().toISOString()};sourceGuides.add(guia);stored++;if(phone){rememberGuidePhone(guia,phone,'TC');guidePhoneGuides.add(guia)}}else unchanged++;
-    if(db.orders[guia]&&sourceChanged){const before={...db.orders[guia]};reconcileOrder(db.orders[guia]);if(!sameOrder(before,db.orders[guia])){db.orders[guia]._syncClient=CLIENT_ID;db.orders[guia]._syncAt=Date.now();changedGuides.add(guia);guideMatches++}}
+    if(db.orders[guia]&&sourceChanged){
+      const o=db.orders[guia],before={...o};
+      // TCIII asociado directamente por número de guía: estos campos viajan dentro del pedido a todas las PCs.
+      o.tcSocio=socio||'';o.tcNombreSocio=nombre||'';o.tcCelular=phone||'';o.tcReferencia=ref||'';
+      reconcileOrder(o);
+      if(!sameOrder(before,o)){o._syncClient=CLIENT_ID;o._syncAt=Date.now();changedGuides.add(guia);guideMatches++}
+    }
   }
   for(const o of Object.values(db.orders)){const before=o.celular;if(o.socio&&touchedSocios.has(o.socio)&&db.contacts[o.socio]?.phone)o.celular=db.contacts[o.socio].phone;if(!before&&o.celular){rememberGuidePhone(o.guia,o.celular,'TC');guidePhoneGuides.add(o.guia);o._syncClient=CLIENT_ID;o._syncAt=Date.now();changedGuides.add(o.guia);recovered++}}
   localCache();
   return{guideMatches,unchanged,masterAdded,masterUpdated,recovered,serviRows,stored,changedGuides:[...changedGuides],sourceGuides:[...sourceGuides],contactSocios:[...touchedSocios],guidePhoneGuides:[...guidePhoneGuides]};
+}
+
+function socioDataForGuide(o){
+  if(!o)return{socio:'',nombre:'',celular:'',referencia:'',fuente:''};
+  const localTc=db.sources?.tc?.[o.guia]||null;
+  const hasEmbedded=!!(o.tcSocio||o.tcNombreSocio||o.tcCelular||o.tcReferencia);
+  const hasLocalTc=!!(localTc&&(localTc.socio||localTc.nombre||localTc.phone||localTc.referencia));
+  if(hasEmbedded||hasLocalTc){
+    return{
+      socio:String(o.tcSocio||localTc?.socio||''),
+      nombre:String(o.tcNombreSocio||localTc?.nombre||''),
+      celular:cleanPhone(o.tcCelular||localTc?.phone||''),
+      referencia:String(o.tcReferencia||localTc?.referencia||''),
+      fuente:'TCIII asociado a guía'
+    };
+  }
+  // Solo si la guía no tiene asociación TCIII, usamos los datos del pedido y el Maestro de contactos como respaldo.
+  const socio=String(o.socio||'').trim();
+  const master=socio?(db.contacts?.[socio]||null):null;
+  return{
+    socio,
+    nombre:String(o.nombreSocio||''),
+    celular:cleanPhone(master?.phone||o.celular||''),
+    referencia:String(o.referencia||''),
+    fuente:master?'Maestro de contactos':'Sin asociación TCIII'
+  };
 }
 
 function openMonths(){
@@ -1766,21 +1805,15 @@ function ensureMonthSelects(){
 }
 
 function ensureServiStatusOptions(){
-  const el=$('pServiStatus');if(!el)return;
-  const old=el.value,m=$('pMonth')?.value||'';
+  const list=$('pServiStatusList');if(!list)return;
+  const m=$('pMonth')?.value||'';
   const statuses=[...new Set(
     Object.values(db.orders||{})
       .filter(o=>!m||monthKey(o.fechaGuia)===m)
       .map(o=>String(o.status||'').trim())
       .filter(Boolean)
   )].sort((a,b)=>a.localeCompare(b,'es'));
-
-  el.innerHTML=
-    '<option value="">Todos</option>'+
-    '<option value="__EMPTY__">Sin status</option>'+
-    statuses.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-
-  if([...el.options].some(o=>o.value===old))el.value=old;
+  list.innerHTML=statuses.map(x=>`<option value="${escapeHtml(x)}"></option>`).join('');
 }
 
 function ownerCountRows(){
@@ -1797,7 +1830,7 @@ function ownerCountRows(){
     (!d||o.fechaGuia===d)&&
     (!c||o.canal===c)&&
     (!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&
-    (!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&
+    (!ss||N(o.status||'').includes(N(ss)))&&
     (!cl||o.clasificacion===cl)&&
     (!q||N([
       o.guia,o.socio,o.nombreSocio,o.destinatario,
@@ -1807,14 +1840,14 @@ function ownerCountRows(){
 }
 
 function renderOwnerTabs(){const own=db.owners.filter(o=>o.active).map(o=>o.name),UN='SIN ASIGNACIÓN';if(activeOwner!=='TODOS'&&activeOwner!==UN&&!own.includes(activeOwner))activeOwner='TODOS';const base=ownerCountRows(),counts={TODOS:base.length};own.forEach(name=>counts[name]=base.filter(o=>o.responsable===name).length);counts[UN]=base.filter(o=>!String(o.responsable||'').trim()).length;$('ownerTabs').innerHTML=['TODOS',...own,UN].map(o=>`<button class="${o===activeOwner?'active':''} ${o===UN&&counts[UN]?'unassigned-tab':''}" data-owner="${escapeHtml(o)}">${escapeHtml(o)}<span class="owner-count">${counts[o]||0}</span></button>`).join('')}
-function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||(ss==='__EMPTY__'?!String(o.status||'').trim():o.status===ss))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(daysSort){const getD=o=>isDelivered(o)?workdaysDiff(o.fechaGuia,o.fechaEntrega):null;rows.sort((a,b)=>{const da=getD(a),dbb=getD(b);if(da==null&&dbb==null)return String(a.guia).localeCompare(String(b.guia));if(da==null)return 1;if(dbb==null)return-1;const diff=daysSort==='desc'?dbb-da:da-dbb;return diff||String(a.guia).localeCompare(String(b.guia))})}else{rows.sort((a,b)=>String(b.fechaGuia||'').localeCompare(String(a.fechaGuia||''))||String(b.guia||'').localeCompare(String(a.guia||'')))}return rows}
+function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||N(o.status||'').includes(N(ss)))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatarioOrigen,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(daysSort){const getD=o=>isDelivered(o)?workdaysDiff(o.fechaGuia,o.fechaEntrega):null;rows.sort((a,b)=>{const da=getD(a),dbb=getD(b);if(da==null&&dbb==null)return String(a.guia).localeCompare(String(b.guia));if(da==null)return 1;if(dbb==null)return-1;const diff=daysSort==='desc'?dbb-da:da-dbb;return diff||String(a.guia).localeCompare(String(b.guia))})}else{const dir=dateSort==='asc'?1:-1;rows.sort((a,b)=>dir*String(a.fechaGuia||'').localeCompare(String(b.fechaGuia||''))||String(b.guia||'').localeCompare(String(a.guia||'')))}return rows}
 function claimOptions(selected=''){return'<option value=""></option>'+db.claims.map(c=>`<option value="${escapeHtml(c.name)}" ${c.name===selected?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
 function syncOrdersHScroll(){const wrap=$('ordersScrollWrap'),bar=$('ordersHScroll'),inner=$('ordersHScrollInner'),table=$('ordersTable');if(!wrap||!bar||!inner||!table)return;requestAnimationFrame(()=>{inner.style.width=Math.max(table.scrollWidth,wrap.clientWidth)+'px';bar.scrollLeft=wrap.scrollLeft});wrap.onscroll=()=>{if(Math.abs(bar.scrollLeft-wrap.scrollLeft)>1)bar.scrollLeft=wrap.scrollLeft};bar.onscroll=()=>{if(Math.abs(wrap.scrollLeft-bar.scrollLeft)>1)wrap.scrollLeft=bar.scrollLeft}}
 function renderOrders(){
   ensureServiStatusOptions();renderOwnerTabs();const rows=orderRows();const showOwner=activeOwner==='TODOS'||activeOwner==='SIN ASIGNACIÓN';
-  $('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th>FECHA GUIA</th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>GESTIÓN</th><th>FECHA ENTREGA</th><th class="sort-days ${daysSort?'active':''}" data-sort-days title="Ordenar por días">DÍAS <span class="sort-arrow">${daysSort==='desc'?'↓':daysSort==='asc'?'↑':'↕'}</span></th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>{
+  $('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th class="sort-date ${dateSort?'active':''}" data-sort-date title="Ordenar por fecha guía">FECHA GUIA <span class="sort-arrow">${dateSort==='desc'?'↓':dateSort==='asc'?'↑':'↕'}</span></th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>GESTIÓN</th><th>FECHA ENTREGA</th><th class="sort-days ${daysSort?'active':''}" data-sort-days title="Ordenar por días">DÍAS <span class="sort-arrow">${daysSort==='desc'?'↓':daysSort==='asc'?'↑':'↕'}</span></th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>{
     const addrTitle=editedFieldTitle(o,'direccion'),phoneTitle=editedFieldTitle(o,'celular'),statusTitle=editedFieldTitle(o,'status'),gestionTitle=editedFieldTitle(o,'gestion'),claimTitle=editedFieldTitle(o,'clasificacion');
-    return `<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatario||o.nombreSocio||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td class="${editedFieldClass(o,'direccion')}" title="${escapeHtml(addrTitle)}"><div class="field-edit-wrap"><span>${escapeHtml(o.direccion||'')}</span><button class="mini-edit" data-edit-address="${escapeHtml(o.guia)}" title="Editar dirección"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable${editedFieldClass(o,'celular',true)}" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable" title="${escapeHtml(phoneTitle)}"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td class="${editedFieldClass(o,'status')}" title="${escapeHtml(statusTitle)}"><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(statusTitle||o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell ${editedFieldClass(o,'gestion')}" title="${escapeHtml(gestionTitle)}"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td class="${editedFieldClass(o,'fechaEntrega')}" title="${escapeHtml(editedFieldTitle(o,'fechaEntrega'))}">${escapeHtml(displayDate(o.fechaEntrega))}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable${editedFieldClass(o,'clasificacion',true)}" style="width:180px" data-edit="${o.guia}" data-field="clasificacion" title="${escapeHtml(claimTitle)}">${claimOptions(o.clasificacion||'')}</select></td></tr>`
+    return `<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatarioOrigen||o.destinatario||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td class="${editedFieldClass(o,'direccion')}" title="${escapeHtml(addrTitle)}"><div class="field-edit-wrap"><span>${escapeHtml(o.direccion||'')}</span><button class="mini-edit" data-edit-address="${escapeHtml(o.guia)}" title="Editar dirección"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable${editedFieldClass(o,'celular',true)}" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable" title="${escapeHtml(phoneTitle)}"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td class="${editedFieldClass(o,'status')}" title="${escapeHtml(statusTitle)}"><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(statusTitle||o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell ${editedFieldClass(o,'gestion')}" title="${escapeHtml(gestionTitle)}"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td class="${editedFieldClass(o,'fechaEntrega')}" title="${escapeHtml(editedFieldTitle(o,'fechaEntrega'))}">${isDelivered(o)?escapeHtml(displayDate(o.fechaEntrega)):''}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable${editedFieldClass(o,'clasificacion',true)}" style="width:180px" data-edit="${o.guia}" data-field="clasificacion" title="${escapeHtml(claimTitle)}">${claimOptions(o.clasificacion||'')}</select></td></tr>`
   }).join('')}</tbody>`;syncOrdersHScroll()
 }
 function startsIngresandoAgencia(status){return N(status).startsWith('INGRESANDO EN AGENCIA')}
@@ -1917,8 +1950,8 @@ window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('activ
 document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos')renderOrders();else if(b.dataset.page==='infobip')renderInfo();else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
-$('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders()});['pMonth','pDate','pChannel','pStatus','pServiStatus','pClaim'].forEach(id=>$(id).addEventListener('change',renderOrders));$('pSearch').addEventListener('input',renderOrders);$('copyGuides').addEventListener('click',async()=>{const rows=orderRows(),guias=rows.map(o=>String(o.guia||'').trim()).filter(Boolean);if(!guias.length){toast('No hay guías con estos filtros');return}const text=guias.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(guias.length+' guías copiadas')});
-$('clearFilters').addEventListener('click',()=>{$('pDate').value='';$('pChannel').value='';$('pStatus').value='';$('pServiStatus').value='';$('pClaim').value='';$('pSearch').value='';daysSort='';renderOrders()});
+$('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders()});['pMonth','pDate','pChannel','pStatus','pClaim'].forEach(id=>$(id).addEventListener('change',renderOrders));$('pServiStatus').addEventListener('input',renderOrders);$('pSearch').addEventListener('input',renderOrders);$('copyGuides').addEventListener('click',async()=>{const rows=orderRows(),guias=rows.map(o=>String(o.guia||'').trim()).filter(Boolean);if(!guias.length){toast('No hay guías con estos filtros');return}const text=guias.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(guias.length+' guías copiadas')});
+$('clearFilters').addEventListener('click',()=>{$('pDate').value='';$('pChannel').value='';$('pStatus').value='';$('pServiStatus').value='';$('pClaim').value='';$('pSearch').value='';daysSort='';dateSort='';renderOrders()});
 const gestionFloatingTip=$('gestionFloatingTip');
 function showGestionTip(btn,text){
   if(!gestionFloatingTip||!text)return;
@@ -1952,8 +1985,8 @@ $('ordersScrollWrap')?.addEventListener('scroll',hideGestionTip);
 window.addEventListener('scroll',hideGestionTip,true);
 window.addEventListener('resize',hideGestionTip);
 
-$('ordersTable').addEventListener('click',e=>{const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';renderOrders();return}const abtn=e.target.closest('[data-edit-address]');if(abtn){const o=db.orders[abtn.dataset.editAddress];if(!o)return;$('addressEditGuide').value=o.guia;$('addressEditValue').value=o.direccion||'';$('addressEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('addressEditModal').style.display='flex';setTimeout(()=>$('addressEditValue').focus(),20);return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=isoDate(o.fechaEntrega)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio];$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Socio</dt><dd>${escapeHtml(o.socio||'')}</dd><dt>Nombre</dt><dd>${escapeHtml(o.nombreSocio||'')}</dd><dt>Celular</dt><dd>${escapeHtml(o.celular||'')}</dd><dt>Responsable</dt><dd>${escapeHtml(o.responsable||'')}</dd><dt>Referencia</dt><dd>${escapeHtml(o.referencia||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;o._editedFields=markEditedFields(o,['responsable']);updateOrderLive(guia,{responsable:owner,manualResponsable:true,_editedFields:o._editedFields});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={},before=String(o?.[field]??'');if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}if(String(o?.[field]??'')!==before){o._editedFields=markEditedFields(o,[field]);patch._editedFields=o._editedFields}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatario||o.nombreSocio||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':displayDate(o.fechaEntrega),'DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
-$('saveDeliveryEdit').addEventListener('click',()=>{const guia=$('deliveryEditGuide').value,o=db.orders[guia];if(!o)return;const status=$('deliveryEditStatus').value.trim(),fecha=isoDate($('deliveryEditDate').value),manualDeliveryAt=new Date().toISOString(),lockedDelivered=isDeliveredStatus(status),edited=[];if(status!==String(o.status||''))edited.push('status');if(fecha!==String(o.fechaEntrega||''))edited.push('fechaEntrega');const patch={status,fechaEntrega:fecha,manualDelivery:true,manualDeliveryAt,lockedDelivered};if(edited.length){o._editedFields=markEditedFields(o,edited);patch._editedFields=o._editedFields}$('deliveryEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Entrega actualizada')});
+$('ordersTable').addEventListener('click',e=>{const fs=e.target.closest('[data-sort-date]');if(fs){dateSort=dateSort==='desc'?'asc':'desc';daysSort='';renderOrders();return}const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';dateSort='';renderOrders();return}const abtn=e.target.closest('[data-edit-address]');if(abtn){const o=db.orders[abtn.dataset.editAddress];if(!o)return;$('addressEditGuide').value=o.guia;$('addressEditValue').value=o.direccion||'';$('addressEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('addressEditModal').style.display='flex';setTimeout(()=>$('addressEditValue').focus(),20);return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=isoDate(o.fechaEntrega)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio],sd=socioDataForGuide(o);$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Código socio</dt><dd>${escapeHtml(sd.socio||'')}</dd><dt>Nombre socio</dt><dd>${escapeHtml(sd.nombre||'')}</dd><dt>Celular</dt><dd>${escapeHtml(sd.celular||'')}</dd><dt>Responsable</dt><dd>${escapeHtml(o.responsable||'')}</dd><dt>Referencia</dt><dd>${escapeHtml(sd.referencia||o.referencia||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;o._editedFields=markEditedFields(o,['responsable']);updateOrderLive(guia,{responsable:owner,manualResponsable:true,_editedFields:o._editedFields});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={},before=String(o?.[field]??'');if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}if(String(o?.[field]??'')!==before){o._editedFields=markEditedFields(o,[field]);patch._editedFields=o._editedFields}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatarioOrigen||o.destinatario||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':isDelivered(o)?displayDate(o.fechaEntrega):'','DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
+$('saveDeliveryEdit').addEventListener('click',()=>{const guia=$('deliveryEditGuide').value,o=db.orders[guia];if(!o)return;const status=$('deliveryEditStatus').value.trim(),lockedDelivered=isDeliveredStatus(status),fecha=lockedDelivered?isoDate($('deliveryEditDate').value):'',manualDeliveryAt=new Date().toISOString(),edited=[];if(status!==String(o.status||''))edited.push('status');if(fecha!==String(o.fechaEntrega||''))edited.push('fechaEntrega');const patch={status,fechaEntrega:fecha,manualDelivery:true,manualDeliveryAt,lockedDelivered};if(edited.length){o._editedFields=markEditedFields(o,edited);patch._editedFields=o._editedFields}$('deliveryEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Entrega actualizada')});
 $('saveAddressEdit').addEventListener('click',()=>{const guia=$('addressEditGuide').value,o=db.orders[guia];if(!o)return;const direccion=$('addressEditValue').value.trim(),patch={direccion};if(direccion!==String(o.direccion||'')){o._editedFields=markEditedFields(o,['direccion']);patch._editedFields=o._editedFields}$('addressEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Dirección actualizada')});
 $('cancelAddressEdit').addEventListener('click',()=>$('addressEditModal').style.display='none');
 $('addressEditModal').addEventListener('click',e=>{if(e.target===$('addressEditModal'))$('addressEditModal').style.display='none'});
@@ -1970,7 +2003,7 @@ $('processNormal').addEventListener('click',async()=>{
   saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';
   try{
     const r=processNormalRows(rows);
-    // v50: la fecha Oriflame se autodetecta y las correcciones manuales de dirección se conservan.
+    // v52: fecha Oriflame autodetectada, dirección manual protegida y TCIII con aliases ampliados de socio/nombre/teléfono.
     renderAll();
     let ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
     let hydrated=[];
@@ -2265,7 +2298,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v50';
+      const bs=$('buildStatus');if(bs)bs.textContent='v52';
     }
   }catch(e){
     console.warn('Build check',e);
