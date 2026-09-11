@@ -67,6 +67,10 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .orders-hscroll::-webkit-scrollbar{height:14px}
 .orders-hscroll::-webkit-scrollbar-thumb{background:#9AA7A1;border-radius:10px;border:3px solid #fff}
 .orders-hscroll::-webkit-scrollbar-track{background:#EDF1EF}
+.orders-perfbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 10px;border-top:1px solid #eef4f1;background:#fbfdfc;font-size:10px;color:#60716a;min-height:29px}
+.orders-perfbar strong{color:#173f2d}
+.orders-load-more{border:1px solid #bfd8ce;background:#fff;color:#0a7148;border-radius:8px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer}
+.orders-load-more:hover{background:#eff9f4}.orders-load-more.hidden{display:none}
 .gestion-cell{position:relative;overflow:visible!important;text-align:center}
 .gestion-btn{width:26px;height:22px;border:1px solid #A9D8BF;background:#F4FBF7;color:#007A3D;border-radius:7px;display:inline-grid;place-items:center;padding:0;cursor:pointer}
 .gestion-btn:hover{background:#E2F6EB;border-color:#00A651}
@@ -177,7 +181,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v52</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v53</span></div>
 </aside>
 
 <main class="main">
@@ -198,6 +202,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
       <div class="field search"><label>Buscar</label><input id="pSearch" placeholder="Guía, socio, destinatario..."></div>
       <button class="btn" id="clearFilters">Limpiar</button>
     </div>
+    <div class="orders-perfbar"><span id="ordersResultInfo">Preparando pedidos…</span><button class="orders-load-more hidden" id="ordersLoadMore" type="button">Cargar más</button></div>
     <div class="table-wrap orders-table-wrap" id="ordersScrollWrap"><table id="ordersTable"></table></div>
     <div class="orders-hscroll" id="ordersHScroll"><div id="ordersHScrollInner"></div></div>
   </div>
@@ -542,6 +547,12 @@ TESTSYNC202609..." style="width:100%;min-height:120px;resize:vertical;border:1px
 
 <script>
 const STORAGE_KEY='servientrega_oriflame_real_v1';
+const STORAGE_META_KEY='servientrega_oriflame_meta_v53';
+const CACHE_DB_NAME='servientrega_oriflame_cache_v53';
+const CACHE_STORE='kv';
+const SYNC_WATERMARK_KEY='servientrega_orders_watermark_v53';
+const DELTA_SAFETY_MS=5*60*1000;
+const ROW_BATCH_SIZE=120;
 const SAFETY_BACKUP_KEY='servientrega_oriflame_safety_backup_v34';
 const DEFAULT_ZONES=[{"zone": "AZUAY", "owner": "Alba"}, {"zone": "CUENCA", "owner": "Alba"}, {"zone": "LOJA- EL SAGRARIO", "owner": "Alba"}, {"zone": "CHORDELEG", "owner": "Alba"}, {"zone": "BOLIVAR", "owner": "Alba"}, {"zone": "CANAR", "owner": "Alba"}, {"zone": "CAÑAR", "owner": "Alba"}, {"zone": "AZOGUEZ", "owner": "Alba"}, {"zone": "CARCHI", "owner": "Alba"}, {"zone": "RIOBAMBA", "owner": "Alba"}, {"zone": "GALAPAGOS", "owner": "Alba"}, {"zone": "LOJA", "owner": "Alba"}, {"zone": "LOS RIOS", "owner": "Alba"}, {"zone": "EL CHACO", "owner": "Alba"}, {"zone": "NAPO", "owner": "Alba"}, {"zone": "PASTAZA", "owner": "Alba"}, {"zone": "PUYO", "owner": "Alba"}, {"zone": "PICHINCHA", "owner": "Alba"}, {"zone": "QUITO", "owner": "Alba"}, {"zone": "VALLE DE LOS CHILLOS", "owner": "Alba"}, {"zone": "SANTA ELENA", "owner": "Alba"}, {"zone": "TUNGURAHUA", "owner": "Alba"}, {"zone": "AMBATO", "owner": "Alba"}, {"zone": "PROGRESO", "owner": "Alba"}, {"zone": "GUARANDA", "owner": "Alba"}, {"zone": "COTOPAXI", "owner": "Alba"}, {"zone": "DURAN", "owner": "Daysi"}, {"zone": "ZAMORA CHINCHIPE", "owner": "Daysi"}, {"zone": "GUAYAS", "owner": "Daysi"}, {"zone": "ZAMORA", "owner": "Daysi"}, {"zone": "CHIMBORAZO", "owner": "Daysi"}, {"zone": "EL GUANO", "owner": "Daysi"}, {"zone": "MORONA SANTIAGO", "owner": "Daysi"}, {"zone": "EL ORO", "owner": "Daysi"}, {"zone": "ELORO", "owner": "Daysi"}, {"zone": "ESMERALDAS", "owner": "Daysi"}, {"zone": "COLIMES", "owner": "Daysi"}, {"zone": "GUAYAQUIL", "owner": "Daysi"}, {"zone": "MILAGRO", "owner": "Daysi"}, {"zone": "POSORJA", "owner": "Daysi"}, {"zone": "NARANJITO", "owner": "Daysi"}, {"zone": "TENGUEL", "owner": "Daysi"}, {"zone": "NARANJAL", "owner": "Daysi"}, {"zone": "PEDRO CARBO", "owner": "Daysi"}, {"zone": "GUAYAQUILHUERTA FRENTE A PARADA DE LA METROVIA", "owner": "Daysi"}, {"zone": "EL TRIUNFO", "owner": "Daysi"}, {"zone": "DAULE", "owner": "Daysi"}, {"zone": "SAMBORONDON", "owner": "Daysi"}, {"zone": "VIRGEN DE FATIMA KM 26", "owner": "Daysi"}, {"zone": "PALESTINA", "owner": "Daysi"}, {"zone": "LOMAS DE SARGENTILLO", "owner": "Daysi"}, {"zone": "ISIDRO AYORA", "owner": "Daysi"}, {"zone": "BALZAR", "owner": "Daysi"}, {"zone": "SALITRE", "owner": "Daysi"}, {"zone": "YAGUACHI", "owner": "Daysi"}, {"zone": "BUCAY", "owner": "Daysi"}, {"zone": "IMBABURA", "owner": "Daysi"}, {"zone": "IBARRA", "owner": "Daysi"}, {"zone": "MANABI", "owner": "Daysi"}, {"zone": "JIPIJAPA", "owner": "Daysi"}, {"zone": "EL CARMEN", "owner": "Daysi"}, {"zone": "MOMPICHE", "owner": "Daysi"}, {"zone": "ORELLANA", "owner": "Daysi"}, {"zone": "SANTO DOMINGO", "owner": "Daysi"}, {"zone": "SANTO DOMINGO DE LOS TSACHILAS", "owner": "Daysi"}, {"zone": "SUCUMBIOS", "owner": "Daysi"}, {"zone": "PIMAMPIRO", "owner": "Daysi"}, {"zone": "JUJAN", "owner": "Daysi"}];
 const DEFAULT_CLAIMS=[{"name": "FUERA DE COBERTURA", "desc": "No llega el camión al sector"}, {"name": "CAMBIO DE DIRECCIÓN", "desc": "Cliente o socio solicita cambio de domicilio"}, {"name": "NUMERO EQUIVOCADO", "desc": "Número de celular equivocado"}, {"name": "CAMBIO A PUP", "desc": "Cliente no está en domicilio y solicita retiro de oficina"}, {"name": "ZONA PELIGROSA", "desc": "La zona es de alto riesgo y el camión no puede ingresar"}, {"name": "DEVOLUCION DE OFICINA", "desc": "El cliente no retiró su pedido en la oficina dentro del plazo"}, {"name": "DEVOLUCION AL REMITENTE", "desc": "Devolución por solicitud de Oriflame o por intentos de entrega"}, {"name": "DEVOLUCION CLIENTE NO DESEA", "desc": "Cliente no desea o no ha realizado pedido"}, {"name": "DEVOLUCION CLIENTE NO RETIRA", "desc": "Cliente no se ha acercado a retirar su pedido"}, {"name": "DIRECCION INCORRECTA", "desc": "Dirección proporcionada en la guía está incorrecta"}, {"name": "DATOS INCOMPLETOS", "desc": "Información de la guía insuficiente"}, {"name": "CIERRE DE VIAS", "desc": "Calles afectadas"}, {"name": "TRAYECTO ESPECIAL", "desc": "Cobertura uno o dos días por semana"}, {"name": "NO HAY QUIEN RECIBA", "desc": "No hay quien reciba en el domicilio"}, {"name": "NO CONTESTA", "desc": "No contesta para coordinar entrega"}, {"name": "SINIESTRO", "desc": "Siniestro de carga"}, {"name": "CELULAR INCORRECTO", "desc": "No registra WhatsApp o está equivocado"}, {"name": "NOVEDAD COURIER", "desc": "Novedad atribuible a Servientrega"}, {"name": "Cierre de vías2", "desc": "Deslizamientos de tierra"}, {"name": "BLOQUEO DE VÍAS", "desc": "Bloqueo por manifestación"}];
@@ -559,6 +570,9 @@ function freshDB(){return{version:27,owners:[{name:'Alba',phone:'0985872770',act
 function normalizeDB(x){x=x||freshDB();x.version=27;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};return x}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
 let db=loadDB(),activeOwner='TODOS',daysSort='',dateSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
+let ordersVisibleLimit=ROW_BATCH_SIZE,lastOrdersFilterSignature='',ordersFilterTimer=null,ordersLastTotal=0;
+let cacheDBPromise=null,cacheSaveTimer=null,cacheHydrated=false,memorySafetyBackup=null;
+let ordersUnsub=null,ordersListenerMode='',ordersWatermark=0;
 const $=id=>document.getElementById(id);
 
 const FIREBASE_CONFIG={
@@ -569,7 +583,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v52.20260910.1';
+const APP_BUILD='v53.20260910.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -617,7 +631,66 @@ function firebaseErrorText(err){
   return (code||msg.slice(0,48)||'ERROR FIREBASE').toUpperCase();
 }
 
-function localCache(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(db))}catch(e){}}
+function openCacheDB(){
+  if(cacheDBPromise)return cacheDBPromise;
+  cacheDBPromise=new Promise((resolve,reject)=>{
+    try{
+      const req=indexedDB.open(CACHE_DB_NAME,1);
+      req.onupgradeneeded=()=>{const idb=req.result;if(!idb.objectStoreNames.contains(CACHE_STORE))idb.createObjectStore(CACHE_STORE)};
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error||new Error('IndexedDB no disponible'));
+    }catch(e){reject(e)}
+  });
+  return cacheDBPromise;
+}
+async function cacheGet(key){
+  try{
+    const idb=await openCacheDB();
+    return await new Promise((resolve,reject)=>{
+      const tx=idb.transaction(CACHE_STORE,'readonly'),req=tx.objectStore(CACHE_STORE).get(key);
+      req.onsuccess=()=>resolve(req.result??null);req.onerror=()=>reject(req.error);
+    });
+  }catch(e){console.warn('Cache get',e);return null}
+}
+async function cachePut(key,value){
+  try{
+    const idb=await openCacheDB();
+    return await new Promise((resolve,reject)=>{
+      const tx=idb.transaction(CACHE_STORE,'readwrite');
+      tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);
+      tx.objectStore(CACHE_STORE).put(value,key);
+    });
+  }catch(e){console.warn('Cache put',e);return false}
+}
+async function hydrateDBFromIndexedDB(){
+  if(cacheHydrated)return;
+  cacheHydrated=true;
+  const cached=await cacheGet('db');
+  if(cached&&cached.orders&&cached.owners){
+    const c=normalizeDB(cached);
+    if(Number(c._updatedAt||0)>=Number(db._updatedAt||0)||!meaningfulLocal(db))db=c;
+  }else if(meaningfulLocal(db)){
+    await cachePut('db',db);
+  }
+  // Desde v53 el volumen grande vive en IndexedDB, no en localStorage.
+  // Eliminamos la copia JSON pesada solo después de tener un respaldo en IndexedDB.
+  if(meaningfulLocal(db)){
+    const ok=await cachePut('db',db);
+    if(ok)try{localStorage.removeItem(STORAGE_KEY)}catch(e){}
+  }
+  try{const w=Number(localStorage.getItem(SYNC_WATERMARK_KEY)||0);if(Number.isFinite(w)&&w>0)ordersWatermark=w}catch(e){}
+}
+function scheduleCacheSave(){
+  clearTimeout(cacheSaveTimer);
+  cacheSaveTimer=setTimeout(async()=>{
+    const ok=await cachePut('db',db);
+    if(ok){
+      try{localStorage.setItem(STORAGE_META_KEY,JSON.stringify({_updatedAt:Number(db._updatedAt||Date.now()),orders:Object.keys(db.orders||{}).length,build:APP_BUILD}))}catch(e){}
+      try{localStorage.removeItem(STORAGE_KEY)}catch(e){}
+    }
+  },350);
+}
+function localCache(){scheduleCacheSave()}
 
 function localISODate(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function editedFieldDate(o,field){return String(o?._editedFields?.[field]||'')}
@@ -640,16 +713,25 @@ function scheduleOrdersLocalFallback(){
   },9000);
 }
 
+function cloneDBSafe(source){
+  try{return typeof structuredClone==='function'?structuredClone(source||db):JSON.parse(JSON.stringify(source||db))}catch(e){return normalizeDB(JSON.parse(JSON.stringify(source||db)))}
+}
 function saveSafetyBackup(source,label='auto'){
   try{
-    const x=normalizeDB(JSON.parse(JSON.stringify(source||db)));
+    const x=normalizeDB(cloneDBSafe(source||db));
     if(!meaningfulLocal(x))return false;
     const payload={savedAt:new Date().toISOString(),label,db:x};
-    localStorage.setItem(SAFETY_BACKUP_KEY,JSON.stringify(payload));
+    memorySafetyBackup=payload;
+    cachePut('safety',payload);
+    // Compatibilidad: solo dejamos copia localStorage cuando todavía es pequeña.
+    try{const s=JSON.stringify(payload);if(s.length<1200000)localStorage.setItem(SAFETY_BACKUP_KEY,s);else localStorage.removeItem(SAFETY_BACKUP_KEY)}catch(e){}
     return true;
   }catch(e){console.warn('Safety backup',e);return false}
 }
-function loadSafetyBackup(){
+async function loadSafetyBackup(){
+  if(memorySafetyBackup?.db)return{...memorySafetyBackup,db:normalizeDB(memorySafetyBackup.db)};
+  const idb=await cacheGet('safety');
+  if(idb?.db)return{...idb,db:normalizeDB(idb.db)};
   try{
     const x=JSON.parse(localStorage.getItem(SAFETY_BACKUP_KEY)||'null');
     return x&&x.db?{...x,db:normalizeDB(x.db)}:null;
@@ -832,8 +914,9 @@ async function refreshOrdersFromServer(){
   try{
     const snap=await fsDB.collection(FB.orders).where('_active','==',true).get({source:'server'}),fresh={};
     snap.forEach(doc=>{const raw=doc.data()||{},d=stripWriteGuard(raw);if(d._deleted)return;const key=String(d.guia||decodeURIComponent(doc.id));fresh[key]=d});
-    db.orders=fresh;cloudFP.orders={};
-    for(const [key,d] of Object.entries(fresh))cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+    db.orders=fresh;cloudFP.orders={};let maxSeen=0;
+    for(const [key,d] of Object.entries(fresh)){cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n}
+    if(maxSeen>0)writeOrdersWatermark(maxSeen);
     localCache();
     const page=activePageId();
     if(page==='pedidos')renderOrders();else if(page==='infobip')renderInfo();else if(page==='dashboard')renderDashboard();
@@ -991,8 +1074,7 @@ function mapPayload(group,key,val){
   const out=cleanCloudValue(val);
   if(group==='orders'){
     if(!out.guia)out.guia=key;
-    // v41: la colección operativa solo escucha documentos activos.
-    // Los cerrados quedan archivados lógicamente y ya no consumen lecturas al abrir la web.
+    // v53 conserva una marca de cambio para poder sincronizar por delta en reaperturas.
     out._active=out._deleted===true?false:true;
   }
   if(group==='contacts'&&!out.socio)out.socio=key;
@@ -1006,7 +1088,8 @@ async function commitOps(ops){
     for(const op of ops.slice(i,i+400)){
       const ref=fsDB.collection(op.collection).doc(safeDocId(op.key));
       if(op.type==='delete'){
-        batch.set(ref,guardedData({guia:String(op.key),_deleted:true,_deletedAt:Date.now(),_active:false}),{merge:false});
+        const now=Date.now();
+        batch.set(ref,guardedData({guia:String(op.key),_deleted:true,_deletedAt:now,_active:false,_syncAt:now,_syncClient:CLIENT_ID}),{merge:false});
       }else batch.set(ref,guardedData(op.data),{merge:false});
     }
     await batch.commit();
@@ -1289,90 +1372,122 @@ async function hydrateGuidesFromCloudSources(guides){
   return changed;
 }
 
+function readOrdersWatermark(){
+  if(ordersWatermark>0)return ordersWatermark;
+  try{const n=Number(localStorage.getItem(SYNC_WATERMARK_KEY)||0);if(Number.isFinite(n)&&n>0)ordersWatermark=n}catch(e){}
+  return ordersWatermark||0;
+}
+function writeOrdersWatermark(v){
+  const n=Number(v||0);if(!Number.isFinite(n)||n<=0)return;
+  if(n>ordersWatermark)ordersWatermark=n;
+  try{localStorage.setItem(SYNC_WATERMARK_KEY,String(ordersWatermark))}catch(e){}
+}
+function maxSyncAtInSnapshot(snap){
+  let m=0;snap.forEach(doc=>{const d=doc.data()||{},n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>m)m=n});return m;
+}
+function finishOrdersServerReady(){
+  ordersServerSnapshotSeen=true;ordersInitialSnapshot=true;clearTimeout(ordersFallbackTimer);setOrdersSourceState('server');
+  firebaseServerLive=true;setCloudStatus('Firebase: EN VIVO · '+liveTime());sessionStorage.removeItem('servi_version_reload_tried');
+}
+function stopOrdersListener(){if(ordersUnsub)try{ordersUnsub()}catch(e){}ordersUnsub=null}
+function startDeltaOrdersListener(){
+  stopOrdersListener();ordersListenerMode='delta';
+  const base=readOrdersWatermark();
+  const cutoff=Math.max(0,base-DELTA_SAFETY_MS);
+  // Una sola condición por _syncAt: no requiere índice compuesto.
+  // Incluye tombstones, de modo que también elimina localmente pedidos cerrados/borrados lógicamente.
+  const ref=fsDB.collection(FB.orders).where('_syncAt','>',cutoff);
+  ordersUnsub=ref.onSnapshot({includeMetadataChanges:true},snap=>{
+    try{
+      lastOrderListenerAt=Date.now();
+      if(snap.metadata.fromCache&&!ordersServerSnapshotSeen){
+        setCloudStatus('Firebase: validando caché...');
+        return;
+      }
+      cloudApplying=true;
+      let changed=false,maxSeen=base;
+      const next={...(db.orders||{})};
+      for(const ch of snap.docChanges()){
+        const raw=ch.doc.data()||{},d=stripWriteGuard(raw);
+        const key=String(d.guia||decodeURIComponent(ch.doc.id));
+        const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n;
+        if(ch.type==='removed'||d._deleted===true||d._active===false){
+          if(next[key]){delete next[key];changed=true}
+          delete cloudFP.orders[key];
+        }else{
+          const prev=next[key];
+          if(!prev||stableJSON(prev)!==stableJSON(d)){next[key]=d;changed=true}
+          cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+        }
+      }
+      db.orders=next;cloudApplying=false;
+      if(maxSeen>0)writeOrdersWatermark(maxSeen);
+      localCache();
+      if(!snap.metadata.fromCache){
+        finishOrdersServerReady();
+        if(changed)renderAll();
+        else if(!ordersInitialSnapshot)renderAll();
+      }else if(changed&&ordersServerSnapshotSeen)renderAll();
+    }catch(err){
+      cloudApplying=false;console.error('Orders delta snapshot',err);setCloudStatus('Firebase: error de pantalla','error');
+    }
+  },err=>{
+    cloudApplying=false;console.error('Orders delta listener',err);firebaseServerLive=false;
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('local');renderAll();
+    toast('Firebase no pudo sincronizar cambios: '+firebaseErrorText(err));
+  });
+}
+function startFullOrdersSeed({legacyOrders=false}={}){
+  stopOrdersListener();ordersListenerMode='full-seed';
+  const ref=legacyOrders?fsDB.collection(FB.orders):fsDB.collection(FB.orders).where('_active','==',true);
+  ordersUnsub=ref.onSnapshot({includeMetadataChanges:true},snap=>{
+    try{
+      lastOrderListenerAt=Date.now();
+      if(snap.metadata.fromCache&&!ordersServerSnapshotSeen){
+        setCloudStatus('Firebase: validando base...');
+        return;
+      }
+      if(snap.metadata.fromCache)return;
+      cloudApplying=true;
+      const official={};let maxSeen=0;
+      snap.forEach(doc=>{
+        const raw=doc.data()||{},d=stripWriteGuard(raw);
+        const key=String(d.guia||decodeURIComponent(doc.id));
+        if(d._deleted===true||d._active===false){delete cloudFP.orders[key];return}
+        official[key]=d;cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+        const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n;
+      });
+      db.orders=official;cloudApplying=false;
+      if(maxSeen<=0)maxSeen=Date.now();
+      writeOrdersWatermark(maxSeen);
+      localCache();finishOrdersServerReady();renderAll();
+      // Después de establecer una base oficial, dejamos de escuchar los 10k completos.
+      setTimeout(()=>startDeltaOrdersListener(),0);
+    }catch(err){
+      cloudApplying=false;console.error('Orders seed snapshot',err);setCloudStatus('Firebase: error de pantalla','error');
+    }
+  },err=>{
+    cloudApplying=false;console.error('Orders seed listener',err);firebaseServerLive=false;
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('local');renderAll();
+    toast('Firebase no pudo leer pedidos: '+firebaseErrorText(err));
+  });
+}
 function setupCloudListeners({legacyOrders=false}={}){
-  if(listenersStarted||!fsDB)return;
-  listenersStarted=true;
+  if(listenersStarted||!fsDB)return;listenersStarted=true;
 
   fsDB.collection(FB.config).doc('principal').onSnapshot({includeMetadataChanges:true},doc=>{
     if(!doc.exists)return;
     const d=stripWriteGuard(doc.data()||{});if(d._deleted)return;
     cloudFP.config=stableJSON(d);
-    cloudApplying=true;applyConfigDoc(d);cloudApplying=false;
-    localCache();
-    if(activePageId()==='config')renderConfig();
-  },err=>{
-    console.error('Config listener',err);
-    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
-  });
+    cloudApplying=true;applyConfigDoc(d);cloudApplying=false;localCache();
+    if(activePageId()==='config')renderConfig();else if(activePageId()==='pedidos')renderOwnerTabs();
+  },err=>{console.error('Config listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
 
-  // v41: solo pedidos activos. Los documentos cerrados/tombstones quedan fuera de la consulta
-  // y no vuelven a cobrarse como lectura cada vez que un usuario abre la aplicación.
-  const ordersRef=legacyOrders?fsDB.collection(FB.orders):fsDB.collection(FB.orders).where('_active','==',true);
-  ordersRef.onSnapshot({includeMetadataChanges:true},snap=>{
-    try{
-      lastOrderListenerAt=Date.now();
-      cloudApplying=true;
-      if(!snap.metadata.fromCache&&!ordersServerSnapshotSeen){
-        const official={};
-        snap.forEach(doc=>{
-          const raw=doc.data()||{},d=stripWriteGuard(raw);
-          const key=String(d.guia||decodeURIComponent(doc.id));
-          if(d._deleted===true||d._active===false){delete cloudFP.orders[key];return}
-          official[key]=d;
-          cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
-        });
-        db.orders=official;
-        ordersServerSnapshotSeen=true;
-        clearTimeout(ordersFallbackTimer);
-        setOrdersSourceState('server');
-      }else{
-        const next={...(db.orders||{})};
-        for(const ch of snap.docChanges()){
-          const raw=ch.doc.data()||{},d=stripWriteGuard(raw);
-          const key=String(d.guia||decodeURIComponent(ch.doc.id));
-          if(ch.type==='removed'||d._deleted===true||d._active===false){
-            delete next[key];delete cloudFP.orders[key];
-          }else{
-            next[key]=d;
-            cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
-          }
-        }
-        db.orders=next;
-      }
-      cloudApplying=false;
-      localCache();
+  // v53: si esta PC ya tiene una base oficial en IndexedDB, solo pide cambios posteriores.
+  // Una PC nueva o con caché borrada hace una carga completa UNA sola vez y luego pasa a delta.
+  const canDelta=meaningfulLocal(db)&&readOrdersWatermark()>0&&!legacyOrders;
+  if(canDelta)startDeltaOrdersListener();else startFullOrdersSeed({legacyOrders});
 
-      if(!ordersInitialSnapshot){ordersInitialSnapshot=true;renderAll()}
-      else{
-        const p=activePageId();
-        if(p==='pedidos')renderOrders();
-        else if(p==='infobip')renderInfo();
-        else if(p==='dashboard')renderDashboard();
-      }
-
-      if(snap.metadata.fromCache){if(!firebaseServerLive)setCloudStatus('Firebase: caché local')}
-      else{
-        firebaseServerLive=true;
-        if(!ordersServerSnapshotSeen){ordersServerSnapshotSeen=true;clearTimeout(ordersFallbackTimer);setOrdersSourceState('server')}
-        setCloudStatus('Firebase: EN VIVO · '+liveTime());
-        sessionStorage.removeItem('servi_version_reload_tried');
-      }
-    }catch(err){
-      cloudApplying=false;
-      console.error('Orders snapshot render',err);
-      setCloudStatus('Firebase: error de pantalla','error');
-    }
-  },err=>{
-    cloudApplying=false;
-    console.error('Orders listener',err);
-    firebaseServerLive=false;
-    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
-    setOrdersSourceState('local');
-    renderAll();
-    toast('Firebase no pudo leer pedidos: '+firebaseErrorText(err));
-  });
-
-  // Solo un documento de señalización; no dispara relecturas masivas.
   if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){}
   syncSignalUnsub=fsDB.collection(FB.sync).doc('state').onSnapshot({includeMetadataChanges:true},doc=>{
     if(doc.exists&&!doc.metadata.fromCache)processSyncSignal(stripWriteGuard(doc.data()||{}));
@@ -1383,11 +1498,12 @@ async function initFirebase(){
   try{
     setOrdersSourceState('loading');
     scheduleOrdersLocalFallback();
+    await hydrateDBFromIndexedDB();
     renderAll();
     firebaseServerLive=false;
     setCloudStatus('Firebase: conectando');
 
-    saveSafetyBackup(db,'antes_de_firebase_v50');
+    saveSafetyBackup(db,'antes_de_firebase_v53');
 
     if(!window.firebase)throw new Error('Firebase SDK no cargó');
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -1636,7 +1752,7 @@ async function syncExplicitBulkNow(kind,{orderGuides=[],tcGuides=[],serviGuides=
   try{
     setCloudStatus(`Firebase: sincronizando ${kind}...`,'saving');
     const ops=[];
-    for(const guia of orderGuides){const d=db.orders[guia];if(d)ops.push({type:'set',collection:FB.orders,key:guia,data:mapPayload('orders',guia,d)})}
+    for(const guia of orderGuides){const d=db.orders[guia];if(d){if(!Number(d._syncAt))d._syncAt=Date.now();ops.push({type:'set',collection:FB.orders,key:guia,data:mapPayload('orders',guia,d)})}}
     for(const guia of deleteOrderGuides)ops.push({type:'delete',collection:FB.orders,key:guia});
     for(const guia of tcGuides){const d=db.sources.tc[guia];if(d&&!db.orders[guia])ops.push({type:'set',collection:FB.tc,key:guia,data:mapPayload('tc',guia,d)})}
     for(const guia of serviGuides){const d=db.sources.servi[guia];if(d&&!db.orders[guia])ops.push({type:'set',collection:FB.servi,key:guia,data:mapPayload('servi',guia,d)})}
@@ -1804,6 +1920,23 @@ function ensureMonthSelects(){
   if(dash.includes(dOld))d.value=dOld;
 }
 
+function debounceOrdersRender(){
+  clearTimeout(ordersFilterTimer);
+  ordersFilterTimer=setTimeout(()=>renderOrders(true),220);
+}
+function orderFilterSignature(){
+  return [activeOwner,$('pMonth')?.value||'',$('pDate')?.value||'',$('pChannel')?.value||'',$('pStatus')?.value||'',$('pServiStatus')?.value||'',$('pClaim')?.value||'',$('pSearch')?.value||'',daysSort,dateSort].join('|');
+}
+function ensureClaimFilterOptions(){
+  const el=$('pClaim');if(!el)return;const old=el.value;
+  el.innerHTML='<option value="">Todos</option>'+db.claims.map(c=>`<option>${escapeHtml(c.name)}</option>`).join('');
+  if([...el.options].some(o=>o.value===old))el.value=old;
+}
+function ensureInfoOwnerOptions(){
+  const el=$('iOwner');if(!el)return;const old=el.value,active=db.owners.filter(o=>o.active);
+  el.innerHTML='<option value="">Todos</option>'+active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');
+  if([...el.options].some(o=>o.value===old))el.value=old;
+}
 function ensureServiStatusOptions(){
   const list=$('pServiStatusList');if(!list)return;
   const m=$('pMonth')?.value||'';
@@ -1843,12 +1976,19 @@ function renderOwnerTabs(){const own=db.owners.filter(o=>o.active).map(o=>o.name
 function orderRows(){const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||N(o.status||'').includes(N(ss)))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatarioOrigen,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));if(daysSort){const getD=o=>isDelivered(o)?workdaysDiff(o.fechaGuia,o.fechaEntrega):null;rows.sort((a,b)=>{const da=getD(a),dbb=getD(b);if(da==null&&dbb==null)return String(a.guia).localeCompare(String(b.guia));if(da==null)return 1;if(dbb==null)return-1;const diff=daysSort==='desc'?dbb-da:da-dbb;return diff||String(a.guia).localeCompare(String(b.guia))})}else{const dir=dateSort==='asc'?1:-1;rows.sort((a,b)=>dir*String(a.fechaGuia||'').localeCompare(String(b.fechaGuia||''))||String(b.guia||'').localeCompare(String(a.guia||'')))}return rows}
 function claimOptions(selected=''){return'<option value=""></option>'+db.claims.map(c=>`<option value="${escapeHtml(c.name)}" ${c.name===selected?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
 function syncOrdersHScroll(){const wrap=$('ordersScrollWrap'),bar=$('ordersHScroll'),inner=$('ordersHScrollInner'),table=$('ordersTable');if(!wrap||!bar||!inner||!table)return;requestAnimationFrame(()=>{inner.style.width=Math.max(table.scrollWidth,wrap.clientWidth)+'px';bar.scrollLeft=wrap.scrollLeft});wrap.onscroll=()=>{if(Math.abs(bar.scrollLeft-wrap.scrollLeft)>1)bar.scrollLeft=wrap.scrollLeft};bar.onscroll=()=>{if(Math.abs(wrap.scrollLeft-bar.scrollLeft)>1)wrap.scrollLeft=bar.scrollLeft}}
-function renderOrders(){
-  ensureServiStatusOptions();renderOwnerTabs();const rows=orderRows();const showOwner=activeOwner==='TODOS'||activeOwner==='SIN ASIGNACIÓN';
+function renderOrders(resetLimit=false){
+  renderOwnerTabs();
+  const sig=orderFilterSignature();
+  if(resetLimit||sig!==lastOrdersFilterSignature){ordersVisibleLimit=ROW_BATCH_SIZE;lastOrdersFilterSignature=sig}
+  const allRows=orderRows(),rows=allRows.slice(0,ordersVisibleLimit),showOwner=activeOwner==='TODOS'||activeOwner==='SIN ASIGNACIÓN';
+  ordersLastTotal=allRows.length;
   $('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th class="sort-date ${dateSort?'active':''}" data-sort-date title="Ordenar por fecha guía">FECHA GUIA <span class="sort-arrow">${dateSort==='desc'?'↓':dateSort==='asc'?'↑':'↕'}</span></th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>GESTIÓN</th><th>FECHA ENTREGA</th><th class="sort-days ${daysSort?'active':''}" data-sort-days title="Ordenar por días">DÍAS <span class="sort-arrow">${daysSort==='desc'?'↓':daysSort==='asc'?'↑':'↕'}</span></th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>{
     const addrTitle=editedFieldTitle(o,'direccion'),phoneTitle=editedFieldTitle(o,'celular'),statusTitle=editedFieldTitle(o,'status'),gestionTitle=editedFieldTitle(o,'gestion'),claimTitle=editedFieldTitle(o,'clasificacion');
     return `<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatarioOrigen||o.destinatario||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td class="${editedFieldClass(o,'direccion')}" title="${escapeHtml(addrTitle)}"><div class="field-edit-wrap"><span>${escapeHtml(o.direccion||'')}</span><button class="mini-edit" data-edit-address="${escapeHtml(o.guia)}" title="Editar dirección"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable${editedFieldClass(o,'celular',true)}" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable" title="${escapeHtml(phoneTitle)}"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td class="${editedFieldClass(o,'status')}" title="${escapeHtml(statusTitle)}"><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(statusTitle||o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell ${editedFieldClass(o,'gestion')}" title="${escapeHtml(gestionTitle)}"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td class="${editedFieldClass(o,'fechaEntrega')}" title="${escapeHtml(editedFieldTitle(o,'fechaEntrega'))}">${isDelivered(o)?escapeHtml(displayDate(o.fechaEntrega)):''}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable${editedFieldClass(o,'clasificacion',true)}" style="width:180px" data-edit="${o.guia}" data-field="clasificacion" title="${escapeHtml(claimTitle)}">${claimOptions(o.clasificacion||'')}</select></td></tr>`
-  }).join('')}</tbody>`;syncOrdersHScroll()
+  }).join('')}</tbody>`;syncOrdersHScroll();
+  const info=$('ordersResultInfo'),more=$('ordersLoadMore');
+  if(info)info.innerHTML=`<strong>${allRows.length}</strong> resultados · mostrando <strong>${Math.min(rows.length,allRows.length)}</strong>${allRows.length>rows.length?` · carga por bloques de ${ROW_BATCH_SIZE}`:''}`;
+  if(more){more.classList.toggle('hidden',rows.length>=allRows.length);more.textContent=`Cargar ${Math.min(ROW_BATCH_SIZE,Math.max(0,allRows.length-rows.length))} más`}
 }
 function startsIngresandoAgencia(status){return N(status).startsWith('INGRESANDO EN AGENCIA')}
 function infoMessage(o){const resp=ownerPhone(o.responsable);if(!o.socio)return{type:'Sin socio',ready:false,line:''};if(!o.celular)return{type:'Sin celular',ready:false,line:''};if(!resp)return{type:'Sin WhatsApp responsable',ready:false,line:''};if(startsIngresandoAgencia(o.status))return{type:'Retiro agencia',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} esta en agencia ${o.status} favor retirar,Whatsapp${resp}`};return{type:'General 48–72h',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} llegara en 48a72h estar pendiente Whatsapp${resp}`}}
@@ -1864,9 +2004,16 @@ function restoreChartCanvas(wrapId,canvasId,extraClass=''){const wrap=$(wrapId);
 function renderDashboard(){const m=$('dMonth').value,closed=!!db.snapshots[m];$('monthStatus').textContent=closed?'MES CERRADO':'MES ABIERTO';$('closeMonth').disabled=!m||closed;const agg=dashboardData();const inferredPending=(agg.porTiempo?.['No entregado']||agg.porTiempo?.['NO ENTREGADO']||0),realDelivered=agg.entregadosReales??Math.max(0,(agg.total||0)-inferredPending),pending=Math.max(0,(agg.total||0)-realDelivered),dp=agg.total?realDelivered*100/agg.total:0,pp=agg.total?pending*100/agg.total:0;$('sumTotal').textContent=agg.total||0;$('sumDelivered').textContent=realDelivered;$('sumPending').textContent=pending;$('sumDeliveredPct').textContent=`${dp.toFixed(1)}% del total`;$('sumPendingPct').textContent=`${pp.toFixed(1)}% del total`;$('sumEffectiveness').textContent=agg.total?`${dp.toFixed(1)}%`:'0%';$('kpiHD').textContent=agg.porCanal.HD||0;$('kpiPUP').textContent=agg.porCanal.PUP||0;$('kpiSPO').textContent=agg.porCanal.SPO||0;const tp=Object.keys(agg.porProvincia).map(k=>({prov:k,cant:agg.porProvincia[k]})).sort((a,b)=>b.cant-a.cant);let htmlP='<div class="tabla-datos"><table><thead><tr><th>Provincia</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumP=0;for(const r of tp){const p=agg.total?Math.round(r.cant*1000/agg.total)/10:0;sumP+=p;htmlP+=`<tr><td>${escapeHtml(r.prov)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlP+='</tbody></table></div>';$('tablaProvincia').innerHTML=tp.length?htmlP:'<div class="empty">Sin datos</div>';$('totalProvincia').textContent=tp.length?`Total: ${Math.round(sumP*10)/10}%`:'';const arrT=Object.keys(agg.porTiempo).map(k=>({k,v:agg.porTiempo[k],p:agg.total?agg.porTiempo[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartTiempo){chartTiempo.destroy();chartTiempo=null}if(arrT.length){restoreChartCanvas('wrapGraficoTiempo','graficoTiempo');chartTiempo=new Chart($('graficoTiempo').getContext('2d'),{type:'bar',data:{labels:arrT.map(x=>x.k),datasets:[{data:arrT.map(x=>x.v),borderWidth:1,backgroundColor:arrT.map(x=>timeChartColor(x.k)),borderColor:arrT.map(x=>timeChartColor(x.k))}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:28}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#213',offset:-4,clamp:true,clip:false,formatter:v=>v}},scales:{x:{beginAtZero:true}}}});$('pngTiempo').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoTiempo','Sin datos');$('pngTiempo').style.display='none'}let htmlT='<div class="tabla-datos"><table><thead><tr><th>Tiempo de Entrega</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumT=0;for(const o of arrT){const p=Math.round(o.p*10)/10;sumT+=o.p;htmlT+=`<tr><td>${escapeHtml(o.k)}</td><td>${o.v}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlT+='</tbody></table></div>';$('tablaTiempo').innerHTML=arrT.length?htmlT:'<div class="empty">Sin datos</div>';$('totalTiempo').textContent=arrT.length?`Total: ${Math.round(sumT*10)/10}%`:'';const tc=Object.keys(agg.porClaim).map(k=>({claim:k,cant:agg.porClaim[k],p:agg.total?agg.porClaim[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartClaims){chartClaims.destroy();chartClaims=null}if(tc.length){restoreChartCanvas('wrapGraficoClaims','graficoClaims','claims');chartClaims=new Chart($('graficoClaims').getContext('2d'),{type:'bar',data:{labels:tc.map(x=>x.claim),datasets:[{data:tc.map(x=>x.cant),borderWidth:1,backgroundColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length]),borderColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length])}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});$('pngClaims').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoClaims','Sin datos');$('pngClaims').style.display='none'}let htmlC='<div class="tabla-datos"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumC=0;for(const r of tc){const p=Math.round(r.p*10)/10;sumC+=r.p;htmlC+=`<tr><td>${escapeHtml(r.claim)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlC+='</tbody></table></div>';$('tablaClaims').innerHTML=tc.length?htmlC:'<div class="empty">Sin datos</div>';$('totalClaims').textContent=tc.length?`Total: ${Math.round(sumC*10)/10}%`:'';$('valorEfectividad').textContent=agg.efectividad==null?'-':agg.efectividad.toFixed(1)+'%';$('valorEfectividadTiempo').textContent=agg.efectividadTiempo==null?'-':agg.efectividadTiempo.toFixed(1)+'%'}
 function renderConfig(){const active=db.owners.filter(o=>o.active);$('iOwner').innerHTML='<option value="">Todos</option>'+active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('newZoneOwner').innerHTML=active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('ownersList').innerHTML=db.owners.map((o,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><input data-owner-name="${i}" value="${escapeHtml(o.name)}"><input data-owner-phone="${i}" value="${escapeHtml(o.phone||'')}"><div class="owner-actions"><button class="btn owner-replace" data-owner-replace="${i}">♻ Reemplazar</button><button class="btn" data-owner-toggle="${i}">${o.active?'Desactivar':'Activar'}</button></div></div>`).join('');$('claimsList').innerHTML=db.claims.map((c,i)=>`<div class="listrow"><input data-claim-name="${i}" value="${escapeHtml(c.name)}"><input data-claim-desc="${i}" value="${escapeHtml(c.desc||'')}"><button class="btn btn-danger" data-claim-del="${i}">Eliminar</button></div>`).join('');$('zonesList').innerHTML=db.zones.map((z,i)=>`<div class="listrow"><input data-zone-name="${i}" value="${escapeHtml(z.zone)}"><select data-zone-owner="${i}">${active.map(o=>`<option ${o.name===z.owner?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select><button class="btn btn-danger" data-zone-del="${i}">Eliminar</button></div>`).join('');const hs=[...(db.settings?.holidays||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)));$('holidaysList').innerHTML=hs.length?hs.map((h,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><strong>${escapeHtml(displayDate(h.date))}</strong><span>-${Number(h.days||0)} día/s</span><button class="btn btn-danger" data-holiday-del="${escapeHtml(h.date)}">Eliminar</button></div>`).join(''):'<div class="empty">Sin feriados configurados</div>';$('pupDaysConfig').value=Number(db.settings?.pupDays??1);renderContacts();$('pClaim').innerHTML='<option value="">Todos</option>'+db.claims.map(c=>`<option>${escapeHtml(c.name)}</option>`).join('');renderSyncTestPanel()}
 function renderContacts(){const q=N($('contactSearch').value),rows=Object.entries(db.contacts).filter(([s,c])=>!q||N(s+' '+c.phone).includes(q)).sort((a,b)=>String(b[1].updated||'').localeCompare(String(a[1].updated||'')));$('contactsList').innerHTML=rows.length?rows.map(([s,c])=>`<div class="listrow"><input value="${escapeHtml(s)}" disabled><input data-contact-phone="${escapeHtml(s)}" value="${escapeHtml(c.phone||'')}"><span style="font-size:10px;color:#697772">${escapeHtml(c.updated||'')} · ${escapeHtml(c.source||'')}</span></div>`).join(''):'<div class="empty">Sin contactos</div>'}
-function renderAll(){ensureMonthSelects();renderConfig();renderOrders();renderInfo();renderDashboard()}
-function reloadSharedDB(showToast=false){if(firebaseReady)return;const latest=loadDB();if((latest._updatedAt||0)>(db._updatedAt||0)){db=latest;renderAll();if(showToast)toast('Datos locales actualizados')}}
-window.addEventListener('storage',e=>{if(e.key===STORAGE_KEY)reloadSharedDB(true)});
+function renderAll(){
+  ensureMonthSelects();
+  const page=activePageId();
+  if(page==='pedidos'){ensureClaimFilterOptions();ensureServiStatusOptions();renderOrders()}
+  else if(page==='infobip'){ensureInfoOwnerOptions();renderInfo()}
+  else if(page==='config')renderConfig();
+  else if(page==='dashboard')renderDashboard();
+}
+async function reloadSharedDB(showToast=false){if(firebaseReady)return;const latest=await cacheGet('db');if(latest&&Number(latest._updatedAt||0)>Number(db._updatedAt||0)){db=normalizeDB(latest);renderAll();if(showToast)toast('Datos locales actualizados')}}
+window.addEventListener('storage',e=>{if(e.key===STORAGE_META_KEY)reloadSharedDB(true)});
 try{if(syncChannel)syncChannel.onmessage=e=>{if(e.data?.type==='db-updated'&&!firebaseReady)reloadSharedDB(true)}}catch(e){}
 
 function exportRows(rows,name){if(!window.XLSX)return alert('No se cargó el módulo Excel.');const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'DATA');XLSX.writeFile(wb,name)}
@@ -1947,11 +2094,23 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos')renderOrders();else if(b.dataset.page==='infobip')renderInfo();else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){ensureClaimFilterOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
-$('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders()});['pMonth','pDate','pChannel','pStatus','pClaim'].forEach(id=>$(id).addEventListener('change',renderOrders));$('pServiStatus').addEventListener('input',renderOrders);$('pSearch').addEventListener('input',renderOrders);$('copyGuides').addEventListener('click',async()=>{const rows=orderRows(),guias=rows.map(o=>String(o.guia||'').trim()).filter(Boolean);if(!guias.length){toast('No hay guías con estos filtros');return}const text=guias.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(guias.length+' guías copiadas')});
-$('clearFilters').addEventListener('click',()=>{$('pDate').value='';$('pChannel').value='';$('pStatus').value='';$('pServiStatus').value='';$('pClaim').value='';$('pSearch').value='';daysSort='';dateSort='';renderOrders()});
+$('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
+$('pMonth').addEventListener('change',()=>{ensureServiStatusOptions();renderOrders(true)});
+['pDate','pChannel','pStatus','pClaim'].forEach(id=>$(id).addEventListener('change',()=>renderOrders(true)));
+$('pServiStatus').addEventListener('input',debounceOrdersRender);
+$('pSearch').addEventListener('input',debounceOrdersRender);
+$('ordersLoadMore')?.addEventListener('click',()=>{ordersVisibleLimit+=ROW_BATCH_SIZE;renderOrders(false)});
+$('ordersScrollWrap')?.addEventListener('scroll',()=>{
+  const w=$('ordersScrollWrap');if(!w||ordersVisibleLimit>=ordersLastTotal)return;
+  if(w.scrollHeight-w.scrollTop-w.clientHeight<220){
+    const top=w.scrollTop;ordersVisibleLimit+=ROW_BATCH_SIZE;renderOrders(false);requestAnimationFrame(()=>{w.scrollTop=top});
+  }
+});
+$('copyGuides').addEventListener('click',async()=>{const rows=orderRows(),guias=rows.map(o=>String(o.guia||'').trim()).filter(Boolean);if(!guias.length){toast('No hay guías con estos filtros');return}const text=guias.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(guias.length+' guías copiadas')});
+$('clearFilters').addEventListener('click',()=>{$('pDate').value='';$('pChannel').value='';$('pStatus').value='';$('pServiStatus').value='';$('pClaim').value='';$('pSearch').value='';daysSort='';dateSort='';ensureServiStatusOptions();renderOrders(true)});
 const gestionFloatingTip=$('gestionFloatingTip');
 function showGestionTip(btn,text){
   if(!gestionFloatingTip||!text)return;
@@ -1985,7 +2144,7 @@ $('ordersScrollWrap')?.addEventListener('scroll',hideGestionTip);
 window.addEventListener('scroll',hideGestionTip,true);
 window.addEventListener('resize',hideGestionTip);
 
-$('ordersTable').addEventListener('click',e=>{const fs=e.target.closest('[data-sort-date]');if(fs){dateSort=dateSort==='desc'?'asc':'desc';daysSort='';renderOrders();return}const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';dateSort='';renderOrders();return}const abtn=e.target.closest('[data-edit-address]');if(abtn){const o=db.orders[abtn.dataset.editAddress];if(!o)return;$('addressEditGuide').value=o.guia;$('addressEditValue').value=o.direccion||'';$('addressEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('addressEditModal').style.display='flex';setTimeout(()=>$('addressEditValue').focus(),20);return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=isoDate(o.fechaEntrega)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio],sd=socioDataForGuide(o);$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Código socio</dt><dd>${escapeHtml(sd.socio||'')}</dd><dt>Nombre socio</dt><dd>${escapeHtml(sd.nombre||'')}</dd><dt>Celular</dt><dd>${escapeHtml(sd.celular||'')}</dd><dt>Responsable</dt><dd>${escapeHtml(o.responsable||'')}</dd><dt>Referencia</dt><dd>${escapeHtml(sd.referencia||o.referencia||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;o._editedFields=markEditedFields(o,['responsable']);updateOrderLive(guia,{responsable:owner,manualResponsable:true,_editedFields:o._editedFields});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={},before=String(o?.[field]??'');if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}if(String(o?.[field]??'')!==before){o._editedFields=markEditedFields(o,[field]);patch._editedFields=o._editedFields}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatarioOrigen||o.destinatario||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':isDelivered(o)?displayDate(o.fechaEntrega):'','DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
+$('ordersTable').addEventListener('click',e=>{const fs=e.target.closest('[data-sort-date]');if(fs){dateSort=dateSort==='desc'?'asc':'desc';daysSort='';renderOrders(true);return}const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';dateSort='';renderOrders(true);return}const abtn=e.target.closest('[data-edit-address]');if(abtn){const o=db.orders[abtn.dataset.editAddress];if(!o)return;$('addressEditGuide').value=o.guia;$('addressEditValue').value=o.direccion||'';$('addressEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('addressEditModal').style.display='flex';setTimeout(()=>$('addressEditValue').focus(),20);return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=isoDate(o.fechaEntrega)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio],sd=socioDataForGuide(o);$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Código socio</dt><dd>${escapeHtml(sd.socio||'')}</dd><dt>Nombre socio</dt><dd>${escapeHtml(sd.nombre||'')}</dd><dt>Celular</dt><dd>${escapeHtml(sd.celular||'')}</dd><dt>Responsable</dt><dd>${escapeHtml(o.responsable||'')}</dd><dt>Referencia</dt><dd>${escapeHtml(sd.referencia||o.referencia||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;o._editedFields=markEditedFields(o,['responsable']);updateOrderLive(guia,{responsable:owner,manualResponsable:true,_editedFields:o._editedFields});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={},before=String(o?.[field]??'');if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}if(String(o?.[field]??'')!==before){o._editedFields=markEditedFields(o,[field]);patch._editedFields=o._editedFields}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatarioOrigen||o.destinatario||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':isDelivered(o)?displayDate(o.fechaEntrega):'','DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
 $('saveDeliveryEdit').addEventListener('click',()=>{const guia=$('deliveryEditGuide').value,o=db.orders[guia];if(!o)return;const status=$('deliveryEditStatus').value.trim(),lockedDelivered=isDeliveredStatus(status),fecha=lockedDelivered?isoDate($('deliveryEditDate').value):'',manualDeliveryAt=new Date().toISOString(),edited=[];if(status!==String(o.status||''))edited.push('status');if(fecha!==String(o.fechaEntrega||''))edited.push('fechaEntrega');const patch={status,fechaEntrega:fecha,manualDelivery:true,manualDeliveryAt,lockedDelivered};if(edited.length){o._editedFields=markEditedFields(o,edited);patch._editedFields=o._editedFields}$('deliveryEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Entrega actualizada')});
 $('saveAddressEdit').addEventListener('click',()=>{const guia=$('addressEditGuide').value,o=db.orders[guia];if(!o)return;const direccion=$('addressEditValue').value.trim(),patch={direccion};if(direccion!==String(o.direccion||'')){o._editedFields=markEditedFields(o,['direccion']);patch._editedFields=o._editedFields}$('addressEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Dirección actualizada')});
 $('cancelAddressEdit').addEventListener('click',()=>$('addressEditModal').style.display='none');
@@ -2003,7 +2162,7 @@ $('processNormal').addEventListener('click',async()=>{
   saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';
   try{
     const r=processNormalRows(rows);
-    // v52: fecha Oriflame autodetectada, dirección manual protegida y TCIII con aliases ampliados de socio/nombre/teléfono.
+    // v53: fecha Oriflame autodetectada, dirección manual protegida, TCIII reforzado y render escalable.
     renderAll();
     let ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
     let hydrated=[];
@@ -2259,7 +2418,7 @@ $('savePupRule').addEventListener('click',()=>{const days=Math.max(0,Number($('p
 
 // Respaldo
 $('restoreSafetyBackup')?.addEventListener('click',async()=>{
-  const b=loadSafetyBackup();
+  const b=await loadSafetyBackup();
   if(!b||!meaningfulLocal(b.db))return alert('No existe una copia local de seguridad disponible en esta computadora.');
   const count=Object.keys(b.db.orders||{}).length;
   if(!confirm(`Se encontró una copia local con ${count} pedidos, guardada ${b.savedAt||''}. ¿Recuperarla y combinarla con Firebase?`))return;
@@ -2276,6 +2435,7 @@ $('restoreSafetyBackup')?.addEventListener('click',async()=>{
 $('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};await syncDBToCloud();await publishSyncSignal('backup-bulk','',Object.keys(db.orders).length,Date.now());renderAll();toast('Respaldo importado y sincronizado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{saveSafetyBackup(db,'antes_de_borrar_pedidos');if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;const deleted=Object.keys(db.orders);db.orders={};saveDB();syncExplicitBulkNow('clear-orders',{deleteOrderGuides:deleted});renderAll();toast('Pedidos abiertos eliminados')});
 $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none');$('socioModal').addEventListener('click',e=>{if(e.target===$('socioModal'))$('socioModal').style.display='none'});
 
+window.addEventListener('pagehide',()=>{try{cachePut('db',db)}catch(e){}});
 let buildCheckRunning=false;
 async function checkPublishedBuild(){
   if(buildCheckRunning||(location.protocol!=='http:'&&location.protocol!=='https:'))return;
@@ -2298,7 +2458,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v52';
+      const bs=$('buildStatus');if(bs)bs.textContent='v53';
     }
   }catch(e){
     console.warn('Build check',e);
@@ -2307,7 +2467,7 @@ async function checkPublishedBuild(){
   }
 }
 
-// Revisar casi al abrir y luego frecuentemente.
+// Revisar versión publicada; esto consulta GitHub, no Firestore.
 setTimeout(checkPublishedBuild,650);
 setInterval(checkPublishedBuild,10000);
 
