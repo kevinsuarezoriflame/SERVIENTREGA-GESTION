@@ -583,7 +583,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v65.20260915.1';
+const APP_BUILD='v66.20260915.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1626,6 +1626,48 @@ function detectOriflameDateMode(rows){
 }
 function isoOriflameDate(v,mode='AUTO'){const d=parseOriflameDate(v,mode);if(!d||d.getFullYear()<2000)return'';return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function isoDate(v){const d=parseAnyDate(v);if(!d)return'';if(d.getFullYear()<2000)return'';return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function isoFromDateObj(d){if(!d||isNaN(d))return'';return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function startOfDay(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function parseServiDeliveryDate(v,guideDate=''){
+  if(v==null||v==='')return'';
+  if(v instanceof Date&&!isNaN(v))return isoFromDateObj(v);
+  if(typeof v==='number'){const d=excelSerialToDate(v);return d?isoFromDateObj(d):''}
+  const s=String(v).trim();if(!s)return'';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return isoDate(s);
+  const m=s.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})$/);
+  if(!m)return isoDate(v);
+  const a=Number(m[1]),b=Number(m[2]),y=Number(m[3]);
+  const candidates=[];
+  const dmy=dateFromParts(y,b,a),mdy=dateFromParts(y,a,b);
+  if(dmy)candidates.push(dmy);
+  if(mdy&&(!dmy||mdy.getTime()!==dmy.getTime()))candidates.push(mdy);
+  if(!candidates.length)return'';
+  const guide=parseAnyDate(guideDate),g=guide?startOfDay(guide):null;
+  const today=startOfDay(new Date()),latest=new Date(today);latest.setDate(latest.getDate()+1);
+  const score=d=>{
+    d=startOfDay(d);
+    if(g&&d<g)return 1e12+Math.abs(d-g);
+    if(d>latest)return 1e11+Math.abs(d-latest);
+    if(g)return Math.abs(d-g);
+    return Math.abs(today-d);
+  };
+  candidates.sort((x,y)=>score(x)-score(y));
+  return isoFromDateObj(candidates[0]);
+}
+function effectiveDeliveryDate(o){
+  if(!o||!o.fechaEntrega)return'';
+  const raw=isoDate(o.fechaEntrega);if(!raw)return'';
+  const d=parseAnyDate(raw),g=parseAnyDate(o.fechaGuia),today=startOfDay(new Date()),latest=new Date(today);latest.setDate(latest.getDate()+1);
+  const valid=x=>!!x&&(!g||startOfDay(x)>=startOfDay(g))&&startOfDay(x)<=latest;
+  if(valid(d))return raw;
+  // Protección visual: si una fecha histórica quedó invertida MM/DD↔DD/MM, se corrige solo para mostrar/calcular.
+  // No escribe nada en Firebase ni modifica el pedido guardado.
+  const y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate();
+  if(m<=12&&day<=12){const swapped=dateFromParts(y,day,m);if(valid(swapped))return isoFromDateObj(swapped)}
+  return'';
+}
+function deliveryDaysForOrder(o){if(!o||!isDelivered(o))return null;const fd=effectiveDeliveryDate(o);return fd?workdaysDiff(o.fechaGuia,fd):null}
+function hasCompleteDeliveredData(o){return!!(o&&isDelivered(o)&&o.fechaEntrega&&deliveryDaysForOrder(o)!==null)}
 function displayDate(v){const d=parseAnyDate(v);return d?`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`:''}
 function monthKey(v){const d=parseAnyDate(v);return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:''}
 function monthName(k){if(!k)return'Sin mes';const[y,m]=k.split('-');const names=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];return`${names[+m-1]} ${y}`}
@@ -1637,7 +1679,7 @@ function statusBadge(o){const s=N(o.status);if(isDelivered(o))return'b-ent';if(i
 function workdaysDiff(a,b){a=parseAnyDate(a);b=parseAnyDate(b);if(!a||!b)return null;a=new Date(a.getFullYear(),a.getMonth(),a.getDate());b=new Date(b.getFullYear(),b.getMonth(),b.getDate());if(b<a)return 0;let n=0,d=new Date(a);while(d<b){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)n++}return n}
 function tiemposEntregaFromDias(d){if(d===null||d===undefined||d==='')return'No entregado';const n=Number(d);if(isNaN(n))return'No entregado';if(n===0)return'Menos de 24hrs';if(n===1)return'24hrs';if(n===2)return'48hrs';if(n===3)return'72hrs';if(n>=4)return'Más de 72hrs';return'No entregado'}
 function addCalendarDays(v,n){const d=parseAnyDate(v);if(!d)return null;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+Number(n||0))}
-function effectivenessDays(o){let d=null;if(o.canal==='PUP'){const synthetic=addCalendarDays(o.fechaGuia,db.settings?.pupDays??1);d=workdaysDiff(o.fechaGuia,synthetic)}else{if(!isDelivered(o))return null;d=workdaysDiff(o.fechaGuia,o.fechaEntrega)}if(d===null||d===undefined)return null;const fg=isoDate(o.fechaGuia);for(const h of (db.settings?.holidays||[])){if(h.date===fg)d=Math.max(0,d-Number(h.days||0))}return d}
+function effectivenessDays(o){let d=null;if(o.canal==='PUP'){const synthetic=addCalendarDays(o.fechaGuia,db.settings?.pupDays??1);d=workdaysDiff(o.fechaGuia,synthetic)}else{if(!isDelivered(o))return null;d=deliveryDaysForOrder(o)}if(d===null||d===undefined)return null;const fg=isoDate(o.fechaGuia);for(const h of (db.settings?.holidays||[])){if(h.date===fg)d=Math.max(0,d-Number(h.days||0))}return d}
 function deliveryTime(o){const d=effectivenessDays(o);return tiemposEntregaFromDias(d)}
 function canonProv(v){let p=N(v||'').replace(/^["']+|["']+$/g,'').trim();if(!p)return'SIN PROVINCIA';if(p.includes('SANTO DOMINGO DE LOS TSACHILAS'))p='SANTO DOMINGO';if(PROVINCIAS.includes(p))return p;for(const loc in LOCALIDAD_PROV){if(p===loc||p.includes(loc))return LOCALIDAD_PROV[loc]}for(const c in CANTON_PROV){if(p===c||p.includes(c))return CANTON_PROV[c]}return p||'SIN PROVINCIA'}
 function inferProvince(o){const vals=[o.provincia,o.ciudad,o.barrio,o.direccion,o.destinatario];for(const v of vals){const p=canonProv(v);if(p&&p!=='SIN PROVINCIA'&&PROVINCIAS.includes(p))return p}return canonProv(o.provincia||o.ciudad||'')||'SIN PROVINCIA'}
@@ -1732,7 +1774,7 @@ function processNormalRows(rows){
   return{created,updated,unchanged,skipped,nonServi,unassigned,missingChannel,dateCorrected,dateMode,changedGuides:[...new Set(changedGuides)],createdGuides:[...new Set(createdGuides)],guidePhoneGuides:[...new Set(guidePhoneGuides)]};
 }
 function processServiRows(rows){
-  let updated=0,unchanged=0,locked=0,notFound=0,empty=0,deliveredNow=0,stored=0;
+  let updated=0,unchanged=0,locked=0,notFound=0,empty=0,deliveredNow=0,stored=0,invalidDate=0;
   const changedGuides=[],sourceGuides=[];
   const exactField=(obj,name)=>{
     const target=canonHeader(name);
@@ -1740,15 +1782,20 @@ function processServiRows(rows){
     return key===undefined?'':obj[key];
   };
   for(const r of rows){
-    // Base Servientrega: la fuente oficial es exclusivamente GUIA + motivo + fecha_entrega.
     const guia=String(exactField(r,'guia')||exactField(r,'cuenta')||'').trim();
     if(!guia){empty++;continue}
+    const o=db.orders[guia];
+
+    // CONTROL: si el pedido ya está entregado, tiene fecha válida y por tanto DÍAS calculables,
+    // una nueva Base Servientrega NO vuelve a tocar status, fecha ni fuente histórica.
+    if(o&&hasCompleteDeliveredData(o)){locked++;continue}
+
     const st=String(exactField(r,'motivo')||'').trim();
     const rawFecha=exactField(r,'fecha_entrega');
-    // Servientrega entrega esta fecha en formato DD/MM/YYYY. isoDate respeta DMY,
-    // y también soporta Date/serial de Excel cuando el archivo se carga directamente.
-    const fe=isoDate(rawFecha);
     const deliveredStatus=isDeliveredStatus(st);
+    const fe=deliveredStatus?parseServiDeliveryDate(rawFecha,o?.fechaGuia||''):'';
+    if(deliveredStatus&&rawFecha&&!fe)invalidDate++;
+
     const prev=db.sources.servi[guia]||{};
     const next={guia,status:st,fechaEntrega:deliveredStatus?fe:''};
     const sourceChanged=!sameFields(prev,next,['guia','status','fechaEntrega']);
@@ -1757,10 +1804,9 @@ function processServiRows(rows){
       sourceGuides.push(guia);stored++;
     }else unchanged++;
 
-    const o=db.orders[guia];
     if(!o){notFound++;continue}
 
-    // Una edición manual se conserva. Fuera de eso, Servientrega manda sobre status y fecha.
+    // Ediciones manuales siempre quedan protegidas.
     if(o.manualDelivery){locked++;continue}
 
     const beforeSnapshot={...o},beforeDelivered=isDelivered(o);
@@ -1778,11 +1824,12 @@ function processServiRows(rows){
   }
   localCache();
   return{
-    updated,unchanged,locked,notFound,empty,deliveredNow,stored,
+    updated,unchanged,locked,notFound,empty,deliveredNow,stored,invalidDate,
     changedGuides:[...new Set(changedGuides)],
     sourceGuides:[...new Set(sourceGuides)]
   };
 }
+
 async function syncExplicitBulkNow(kind,{orderGuides=[],tcGuides=[],serviGuides=[],contactSocios=[],guidePhoneGuides=[],snapshotKeys=[],deleteOrderGuides=[]}={}){
   const uniq=a=>[...new Set((a||[]).map(String).filter(Boolean))];
   orderGuides=uniq(orderGuides);tcGuides=uniq(tcGuides);serviGuides=uniq(serviGuides);
@@ -2021,7 +2068,7 @@ function orderRows(){
   let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||N(o.status||'').includes(N(ss)))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatarioOrigen,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));
   if(daysSort){
     // Rendimiento: DÍAS se calcula una sola vez por pedido, no en cada comparación del sort.
-    const ranked=rows.map(o=>({o,d:isDelivered(o)&&o.fechaEntrega?workdaysDiff(o.fechaGuia,o.fechaEntrega):null}));
+    const ranked=rows.map(o=>({o,d:deliveryDaysForOrder(o)}));
     ranked.sort((a,b)=>{
       if(a.d==null&&b.d==null)return String(a.o.guia||'').localeCompare(String(b.o.guia||''));
       if(a.d==null)return 1;
@@ -2046,7 +2093,7 @@ function renderOrders(resetLimit=false,skipOwnerTabs=false){
   ordersLastTotal=allRows.length;
   $('ordersTable').innerHTML=`<thead><tr><th>GUIA</th><th class="sort-date ${dateSort?'active':''}" data-sort-date title="Ordenar por fecha guía">FECHA GUIA <span class="sort-arrow">${dateSort==='desc'?'↓':dateSort==='asc'?'↑':'↕'}</span></th><th>COD DISTR.</th><th>NOMBRE DESTINATARIO</th><th>DIRECCIÓN</th><th>REFERENCIA</th><th>CELULAR</th><th>NUMERO DE ORDEN</th><th>BARRIO</th><th>PROVINCIA</th><th>CANAL</th>${showOwner?'<th>RESPONSABLE</th>':''}<th>STATUS SERVIENTREGA</th><th>GESTIÓN</th><th>FECHA ENTREGA</th><th class="sort-days ${daysSort?'active':''}" data-sort-days title="Ordenar por días">DÍAS <span class="sort-arrow">${daysSort==='desc'?'↓':daysSort==='asc'?'↑':'↕'}</span></th><th>CLASIFICACION/CLAIMS</th></tr></thead><tbody>${rows.map(o=>{
     const addrTitle=editedFieldTitle(o,'direccion'),phoneTitle=editedFieldTitle(o,'celular'),statusTitle=editedFieldTitle(o,'status'),gestionTitle=editedFieldTitle(o,'gestion'),claimTitle=editedFieldTitle(o,'clasificacion');
-    return `<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatarioOrigen||o.destinatario||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td class="${editedFieldClass(o,'direccion')}" title="${escapeHtml(addrTitle)}"><div class="field-edit-wrap"><span>${escapeHtml(o.direccion||'')}</span><button class="mini-edit" data-edit-address="${escapeHtml(o.guia)}" title="Editar dirección"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable${editedFieldClass(o,'celular',true)}" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable" title="${escapeHtml(phoneTitle)}"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td class="${editedFieldClass(o,'status')}" title="${escapeHtml(statusTitle)}"><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(statusTitle||o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell ${editedFieldClass(o,'gestion')}" title="${escapeHtml(gestionTitle)}"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td class="${editedFieldClass(o,'fechaEntrega')}" title="${escapeHtml(editedFieldTitle(o,'fechaEntrega'))}">${isDelivered(o)?escapeHtml(displayDate(o.fechaEntrega)):''}</td><td>${isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO'}</td><td><select class="editable${editedFieldClass(o,'clasificacion',true)}" style="width:180px" data-edit="${o.guia}" data-field="clasificacion" title="${escapeHtml(claimTitle)}">${claimOptions(o.clasificacion||'')}</select></td></tr>`
+    return `<tr data-order-row="${escapeHtml(o.guia)}" class="${workingGuide===o.guia?'working-row ':''}${remotePulse[o.guia]&&Date.now()-remotePulse[o.guia]<3000?'remote-updated':''}"><td><span class="guide-id">${escapeHtml(o.guia)}</span></td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.codDistr)}</td><td>${escapeHtml(o.destinatarioOrigen||o.destinatario||'')}${isOffice(o)?`<button class="socio-btn" data-socio="${escapeHtml(o.guia)}">Ver socio</button>`:''}</td><td class="${editedFieldClass(o,'direccion')}" title="${escapeHtml(addrTitle)}"><div class="field-edit-wrap"><span>${escapeHtml(o.direccion||'')}</span><button class="mini-edit" data-edit-address="${escapeHtml(o.guia)}" title="Editar dirección"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td>${escapeHtml(o.referencia||'')}</td><td><input class="editable${editedFieldClass(o,'celular',true)}" style="width:92px" data-edit="${o.guia}" data-field="celular" value="${escapeHtml(o.celular||'')}" placeholder="Editable" title="${escapeHtml(phoneTitle)}"></td><td>${escapeHtml(o.numeroOrden||'')}</td><td>${escapeHtml(o.barrio||'')}</td><td>${escapeHtml(canonProv(o.provincia||o.ciudad||''))}</td><td><span class="badge b-neutral">${escapeHtml(o.canal)}</span></td>${showOwner?`<td>${activeOwner==='SIN ASIGNACIÓN'?`<select class="editable owner-assign" data-assign-owner="${escapeHtml(o.guia)}"><option value="">Asignar...</option>${db.owners.filter(x=>x.active).map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select>`:escapeHtml(o.responsable||'')}</td>`:''}<td class="${editedFieldClass(o,'status')}" title="${escapeHtml(statusTitle)}"><div class="field-edit-wrap"><span class="badge ${statusBadge(o)}" title="${escapeHtml(statusTitle||o.status||'')}">${escapeHtml(o.status||'Pendiente')}</span><button class="mini-edit" data-edit-delivery="${escapeHtml(o.guia)}" title="Editar status"><svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 6 4 4"/></svg></button></div></td><td class="gestion-cell ${editedFieldClass(o,'gestion')}" title="${escapeHtml(gestionTitle)}"><button class="gestion-btn ${o.gestion?'has-note':''}" data-gestion="${escapeHtml(o.guia)}" title="${o.gestion?'Editar gestión':'Agregar gestión'}"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg></button>${o.gestion?`<span class="gestion-tip" data-gestion-text="${escapeHtml(o.gestion)}"></span>`:''}</td><td class="${editedFieldClass(o,'fechaEntrega')}" title="${escapeHtml(editedFieldTitle(o,'fechaEntrega'))}">${isDelivered(o)?escapeHtml(displayDate(effectiveDeliveryDate(o))):''}</td><td>${isDelivered(o)?(deliveryDaysForOrder(o)??''):'NO ENTREGADO'}</td><td><select class="editable${editedFieldClass(o,'clasificacion',true)}" style="width:180px" data-edit="${o.guia}" data-field="clasificacion" title="${escapeHtml(claimTitle)}">${claimOptions(o.clasificacion||'')}</select></td></tr>`
   }).join('')}</tbody>`;syncOrdersHScroll();
   const info=$('ordersResultInfo'),more=$('ordersLoadMore');
   if(info)info.innerHTML=`<strong>${allRows.length}</strong> resultados · mostrando <strong>${Math.min(rows.length,allRows.length)}</strong>${allRows.length>rows.length?` · carga por bloques de ${ROW_BATCH_SIZE}`:''}`;
@@ -2206,7 +2253,7 @@ $('ordersScrollWrap')?.addEventListener('scroll',hideGestionTip);
 window.addEventListener('scroll',hideGestionTip,true);
 window.addEventListener('resize',hideGestionTip);
 
-$('ordersTable').addEventListener('click',e=>{const fs=e.target.closest('[data-sort-date]');if(fs){dateSort=dateSort==='desc'?'asc':'desc';daysSort='';renderOrders(false,true);return}const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';dateSort='';renderOrders(false,true);return}const abtn=e.target.closest('[data-edit-address]');if(abtn){const o=db.orders[abtn.dataset.editAddress];if(!o)return;$('addressEditGuide').value=o.guia;$('addressEditValue').value=o.direccion||'';$('addressEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('addressEditModal').style.display='flex';setTimeout(()=>$('addressEditValue').focus(),20);return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=isoDate(o.fechaEntrega)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio],sd=socioDataForGuide(o);$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Código socio</dt><dd>${escapeHtml(sd.socio||'')}</dd><dt>Nombre socio</dt><dd>${escapeHtml(sd.nombre||'')}</dd><dt>Celular</dt><dd>${escapeHtml(sd.celular||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;o._editedFields=markEditedFields(o,['responsable']);updateOrderLive(guia,{responsable:owner,manualResponsable:true,_editedFields:o._editedFields});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={},before=String(o?.[field]??'');if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}if(String(o?.[field]??'')!==before){o._editedFields=markEditedFields(o,[field]);patch._editedFields=o._editedFields}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatarioOrigen||o.destinatario||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':isDelivered(o)?displayDate(o.fechaEntrega):'','DÍAS':isDelivered(o)?(workdaysDiff(o.fechaGuia,o.fechaEntrega)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
+$('ordersTable').addEventListener('click',e=>{const fs=e.target.closest('[data-sort-date]');if(fs){dateSort=dateSort==='desc'?'asc':'desc';daysSort='';renderOrders(false,true);return}const ds=e.target.closest('[data-sort-days]');if(ds){daysSort=daysSort==='desc'?'asc':'desc';dateSort='';renderOrders(false,true);return}const abtn=e.target.closest('[data-edit-address]');if(abtn){const o=db.orders[abtn.dataset.editAddress];if(!o)return;$('addressEditGuide').value=o.guia;$('addressEditValue').value=o.direccion||'';$('addressEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('addressEditModal').style.display='flex';setTimeout(()=>$('addressEditValue').focus(),20);return}const dbtn=e.target.closest('[data-edit-delivery]');if(dbtn){const o=db.orders[dbtn.dataset.editDelivery];if(!o)return;$('deliveryEditGuide').value=o.guia;$('deliveryEditStatus').value=o.status||'';$('deliveryEditDate').value=effectiveDeliveryDate(o)||'';$('deliveryEditMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('deliveryEditModal').style.display='flex';return}const gb=e.target.closest('[data-gestion]');if(gb){const o=db.orders[gb.dataset.gestion];if(!o)return;$('gestionGuide').value=o.guia;$('gestionText').value=o.gestion||'';$('gestionMeta').innerHTML=`Guía <b>${escapeHtml(o.guia)}</b> · ${escapeHtml(o.destinatario||'')}`;$('gestionModal').style.display='flex';setTimeout(()=>$('gestionText').focus(),20);return}const b=e.target.closest('[data-socio]');if(b){const o=db.orders[b.dataset.socio],sd=socioDataForGuide(o);$('socioBody').innerHTML=`<dt>Guía</dt><dd>${escapeHtml(o.guia)}</dd><dt>Código socio</dt><dd>${escapeHtml(sd.socio||'')}</dd><dt>Nombre socio</dt><dd>${escapeHtml(sd.nombre||'')}</dd><dt>Celular</dt><dd>${escapeHtml(sd.celular||'')}</dd>`;$('socioModal').style.display='flex';return}if(e.target.closest('input,select,button'))return;const tr=e.target.closest('[data-order-row]');if(!tr)return;workingGuide=tr.dataset.orderRow;document.querySelectorAll('#ordersTable tr.working-row').forEach(x=>x.classList.remove('working-row'));tr.classList.add('working-row')});$('ordersTable').addEventListener('change',e=>{const sel=e.target.closest('[data-assign-owner]');if(!sel)return;const guia=sel.dataset.assignOwner,owner=sel.value,o=db.orders[guia];if(!o||!owner)return;o.responsable=owner;o.manualResponsable=true;o._editedFields=markEditedFields(o,['responsable']);updateOrderLive(guia,{responsable:owner,manualResponsable:true,_editedFields:o._editedFields});toast(`Guía ${guia} asignada a ${owner}`)});$('ordersTable').addEventListener('change',e=>{const el=e.target,guia=el.dataset.edit,field=el.dataset.field;if(!guia||!field)return;const o=db.orders[guia],patch={},before=String(o?.[field]??'');if(field==='celular'){o.celular=cleanPhone(el.value);patch.celular=o.celular;if(o.celular)rememberGuidePhone(o.guia,o.celular,'Manual');if(o.socio&&o.celular)registerContact(o.socio,o.celular,'Manual');syncAuxContactBackground(o)}else if(field==='socio'){o.socio=String(el.value).trim();hydrateContact(o);patch.socio=o.socio;patch.celular=o.celular||''}else{o[field]=el.value;patch[field]=el.value}if(String(o?.[field]??'')!==before){o._editedFields=markEditedFields(o,[field]);patch._editedFields=o._editedFields}updateOrderLive(guia,patch);toast('Pedido actualizado')});$('exportOrders').addEventListener('click',()=>exportRows(orderRows().map(o=>({'GUIA':o.guia,'FECHA GUIA':displayDate(o.fechaGuia),'COD DISTR.':o.codDistr,'NOMBRE DESTINATARIO':o.destinatarioOrigen||o.destinatario||'','DIRECCIÓN':o.direccion,'REFERENCIA':o.referencia,'CELULAR':o.celular,'NUMERO DE ORDEN':o.numeroOrden,'BARRIO':o.barrio,'PROVINCIA':o.provincia,'CANAL':o.canal,'RESPONSABLE':o.responsable,'STATUS SERVIENTREGA':o.status,'FECHA ENTREGA':isDelivered(o)?displayDate(effectiveDeliveryDate(o)):'','DÍAS':isDelivered(o)?(deliveryDaysForOrder(o)??''):'NO ENTREGADO','CLASIFICACION/CLAIMS':o.clasificacion,'GESTIÓN':o.gestion||''})),'PEDIDOS_SERVIENTREGA.xlsx'));
 $('saveDeliveryEdit').addEventListener('click',()=>{const guia=$('deliveryEditGuide').value,o=db.orders[guia];if(!o)return;const status=$('deliveryEditStatus').value.trim(),lockedDelivered=isDeliveredStatus(status),fecha=lockedDelivered?isoDate($('deliveryEditDate').value):'',manualDeliveryAt=new Date().toISOString(),edited=[];if(status!==String(o.status||''))edited.push('status');if(fecha!==String(o.fechaEntrega||''))edited.push('fechaEntrega');const patch={status,fechaEntrega:fecha,manualDelivery:true,manualDeliveryAt,lockedDelivered};if(edited.length){o._editedFields=markEditedFields(o,edited);patch._editedFields=o._editedFields}$('deliveryEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Entrega actualizada')});
 $('saveAddressEdit').addEventListener('click',()=>{const guia=$('addressEditGuide').value,o=db.orders[guia];if(!o)return;const direccion=$('addressEditValue').value.trim(),patch={direccion};if(direccion!==String(o.direccion||'')){o._editedFields=markEditedFields(o,['direccion']);patch._editedFields=o._editedFields}$('addressEditModal').style.display='none';updateOrderLive(guia,patch,{render:'orders'});toast('Dirección actualizada')});
 $('cancelAddressEdit').addEventListener('click',()=>$('addressEditModal').style.display='none');
@@ -2224,7 +2271,7 @@ $('processNormal').addEventListener('click',async()=>{
   const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');if(!validateBaseBeforeProcess(rows,'normal','resNormal'))return;saveSafetyBackup(db,'antes_de_carga');const btn=$('processNormal'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';
   try{
     const r=processNormalRows(rows);
-    // v65: valida encabezados antes de procesar y mantiene motivo + fecha_entrega como fuente Servientrega.
+    // v66: valida encabezados, protege entregados completos y controla fechas ambiguas sin reescribir históricos.
     renderAll();
     let ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
     let hydrated=[];
@@ -2237,7 +2284,7 @@ $('processNormal').addEventListener('click',async()=>{
   }finally{btn.disabled=false;btn.textContent=oldText}
 });
 $('processServi').addEventListener('click',async()=>{
-  const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');if(!validateBaseBeforeProcess(rows,'servi','resServi'))return;saveSafetyBackup(db,'antes_de_carga');const btn=$('processServi');btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processServiRows(rows);renderAll();const ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides});showResult('resServi',`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`);if(ok)$('txtServi').value=''}finally{btn.disabled=false;btn.textContent='Actualizar status'}});
+  const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');if(!validateBaseBeforeProcess(rows,'servi','resServi'))return;saveSafetyBackup(db,'antes_de_carga');const btn=$('processServi');btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processServiRows(rows);renderAll();const ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides});showResult('resServi',`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos completos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b> · Fechas inválidas rechazadas: <b>${r.invalidDate||0}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`);if(ok)$('txtServi').value=''}finally{btn.disabled=false;btn.textContent='Actualizar status'}});
 $('processTc').addEventListener('click',async()=>{
   const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');if(!validateBaseBeforeProcess(rows,'tc','resTc'))return;saveSafetyBackup(db,'antes_de_carga');const btn=$('processTc'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processTcRows(rows);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase; conserva TC y reintenta</b>'}`);if(ok)$('txtTc').value=''}finally{btn.disabled=false;btn.textContent=oldText}});
 async function processFile(inputId,type,resultId){
@@ -2253,7 +2300,7 @@ async function processFile(inputId,type,resultId){
     }
     if(type==='servi'){r=processServiRows(rows);renderAll();ok=await syncExplicitBulkNow('servi',{orderGuides:r.changedGuides,serviGuides:r.sourceGuides})}
     if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}
-    showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fechas corregidas: <b>${r.dateCorrected||0}</b> · Fecha detectada: <b>${r.dateMode==='DMY'?'DD/MM':r.dateMode==='MDY'?'MM/DD':'AUTO'}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`)
+    showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fechas corregidas: <b>${r.dateCorrected||0}</b> · Fecha detectada: <b>${r.dateMode==='DMY'?'DD/MM':r.dateMode==='MDY'?'MM/DD':'AUTO'}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos completos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b> · Fechas inválidas rechazadas: <b>${r.invalidDate||0}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`)
   }catch(e){alert(e.message||e)}
 }
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
