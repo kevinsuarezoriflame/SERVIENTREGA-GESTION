@@ -181,7 +181,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v54</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v60</span></div>
 </aside>
 
 <main class="main">
@@ -583,7 +583,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v54.20260911.1';
+const APP_BUILD='v60.20260915.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1696,14 +1696,23 @@ function processNormalRows(rows){
 function processServiRows(rows){
   let updated=0,unchanged=0,locked=0,notFound=0,empty=0,deliveredNow=0,stored=0;
   const changedGuides=[],sourceGuides=[];
+  const exactField=(obj,name)=>{
+    const target=canonHeader(name);
+    const key=Object.keys(obj||{}).find(k=>canonHeader(k)===target);
+    return key===undefined?'':obj[key];
+  };
   for(const r of rows){
-    const guia=String(getObjValue(r,['guia','GUIA','cuenta'])).trim();
+    // Base Servientrega: la fuente oficial es exclusivamente GUIA + motivo + fecha_entrega.
+    const guia=String(exactField(r,'guia')||exactField(r,'cuenta')||'').trim();
     if(!guia){empty++;continue}
-    const st=String(getObjValue(r,['motivo','MOTIVO','status','estado'])).trim();
-    const fe=isoDate(getObjValue(r,['fecha_entrega','FECHA ENTREGA','FECHA_ENTREGA']));
+    const st=String(exactField(r,'motivo')||'').trim();
+    const rawFecha=exactField(r,'fecha_entrega');
+    // Servientrega entrega esta fecha en formato DD/MM/YYYY. isoDate respeta DMY,
+    // y también soporta Date/serial de Excel cuando el archivo se carga directamente.
+    const fe=isoDate(rawFecha);
+    const deliveredStatus=isDeliveredStatus(st);
     const prev=db.sources.servi[guia]||{};
-    const effectiveStatus=st||prev.status||'';
-    const next={guia,status:effectiveStatus,fechaEntrega:isDeliveredStatus(effectiveStatus)?(fe||prev.fechaEntrega||''):''};
+    const next={guia,status:st,fechaEntrega:deliveredStatus?fe:''};
     const sourceChanged=!sameFields(prev,next,['guia','status','fechaEntrega']);
     if(sourceChanged){
       db.sources.servi[guia]={...next,updatedAt:new Date().toISOString()};
@@ -1713,21 +1722,14 @@ function processServiRows(rows){
     const o=db.orders[guia];
     if(!o){notFound++;continue}
 
+    // Una edición manual se conserva. Fuera de eso, Servientrega manda sobre status y fecha.
+    if(o.manualDelivery){locked++;continue}
+
     const beforeSnapshot={...o},beforeDelivered=isDelivered(o);
-
-    // Entregados protegidos no se pisan, pero aseguramos el lock.
-    if(isDelivered(o)){
-      if(!o.lockedDelivered){
-        o.lockedDelivered=true;
-        o._syncClient=CLIENT_ID;o._syncAt=Date.now();
-        changedGuides.push(guia);
-      }
-      locked++;
-      continue;
-    }
-
-    if(sourceChanged)reconcileOrder(o);
-    if(!beforeDelivered&&isDelivered(o))deliveredNow++;
+    o.status=st;
+    o.fechaEntrega=deliveredStatus?fe:'';
+    o.lockedDelivered=deliveredStatus;
+    if(!beforeDelivered&&deliveredStatus)deliveredNow++;
 
     if(!sameOrder(beforeSnapshot,o)){
       o._syncClient=CLIENT_ID;
@@ -2165,7 +2167,7 @@ $('processNormal').addEventListener('click',async()=>{
   saveSafetyBackup(db,'antes_de_carga');const rows=parseTSV($('txtNormal').value);if(!rows.length)return toast('No hay datos para procesar');const btn=$('processNormal'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';
   try{
     const r=processNormalRows(rows);
-    // v54: mantiene nombre de agencia para PUP desde TCIII y separa claramente los datos del socio asociado a la guía.
+    // v60: mantiene agencia/TCIII y usa exclusivamente motivo + fecha_entrega desde Base Servientrega.
     renderAll();
     let ok=await syncExplicitBulkNow('oriflame',{orderGuides:r.changedGuides,guidePhoneGuides:r.guidePhoneGuides});
     let hydrated=[];
@@ -2461,7 +2463,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v54';
+      const bs=$('buildStatus');if(bs)bs.textContent='v60';
     }
   }catch(e){
     console.warn('Build check',e);
