@@ -663,7 +663,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v75.20261002.1';
+const APP_BUILD='v76.20261002.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1178,7 +1178,7 @@ async function commitOps(ops,onProgress=null,batchSize=400){
         batch.set(ref,guardedData({guia:String(op.key),_deleted:true,_deletedAt:now,_active:false,_syncAt:now,_syncClient:CLIENT_ID}),{merge:false});
       }else batch.set(ref,guardedData(op.data),{merge:false});
     }
-    await firebaseTimeout(batch.commit(),30000,'Firebase (lote '+(Math.floor(i/batchSize)+1)+')');
+    await firebaseTimeout(batch.commit(),45000,'Firebase (lote '+(Math.floor(i/batchSize)+1)+')');
     done+=chunk.length;
     if(typeof onProgress==='function')onProgress(done,ops.length);
   }
@@ -1603,8 +1603,11 @@ async function initFirebase(){
     if(!firestoreConfigured){
       fsDB.settings({
         ignoreUndefinedProperties:true,
-        experimentalAutoDetectLongPolling:true,
-        experimentalLongPollingOptions:{timeoutSeconds:20}
+        // v76 · Red corporativa: forzar long-polling evita que proxies/firewalls
+        // dejen WebChannel esperando indefinidamente. Esta misma estrategia ya
+        // fue usada en la versión corporativa original.
+        experimentalForceLongPolling:true,
+        experimentalLongPollingOptions:{timeoutSeconds:15}
       });
       firestoreConfigured=true;
     }
@@ -1943,11 +1946,31 @@ function serviCloudMismatchGuides(guides=[]){
 async function firebaseServiPreflight(onProgress=null){
   if(!firebaseReady||!fsDB)throw new Error('Firebase no está conectado');
   if(typeof onProgress==='function')onProgress('Comprobando Firebase...');
-  const ref=fsDB.collection(FB.sync).doc('preflight_servientrega');
-  const probe=guardedData({kind:'preflight-servientrega',client:CLIENT_ID,at:Date.now(),build:APP_BUILD});
-  await firebaseTimeout(ref.set(probe,{merge:false}),10000,'Prueba de escritura Firebase');
-  await firebaseTimeout(ref.get({source:'server'}),10000,'Prueba de lectura Firebase');
+  // v76: NO hacemos una escritura artificial de prueba. En una red bloqueada,
+  // ese set() puede quedar pendiente dentro de la cola del SDK aun después del timeout.
+  // Probamos conectividad real con lectura de servidor; la escritura se valida con
+  // el primer lote real. Si la red corporativa viene trabada, reiniciamos transporte
+  // una sola vez y repetimos la lectura.
+  const ref=fsDB.collection(FB.sync).doc('state');
+  try{
+    await firebaseTimeout(ref.get({source:'server'}),25000,'Prueba de conexión Firebase');
+  }catch(firstErr){
+    if(typeof onProgress==='function')onProgress('Reiniciando conexión Firebase...');
+    await resetFirebaseTransport();
+    if(typeof onProgress==='function')onProgress('Comprobando Firebase...');
+    await firebaseTimeout(ref.get({source:'server'}),25000,'Prueba de conexión Firebase');
+  }
   return true;
+}
+async function resetFirebaseTransport(){
+  if(!fsDB)return;
+  try{
+    setCloudStatus('Firebase: reiniciando conexión...','saving');
+    await fsDB.disableNetwork();
+    await new Promise(r=>setTimeout(r,700));
+    await fsDB.enableNetwork();
+    await new Promise(r=>setTimeout(r,900));
+  }catch(e){console.warn('Firebase transport reset',e)}
 }
 async function verifyServiCloud(guides=[]){
   const sample=[...new Set((guides||[]).map(String).filter(Boolean))].filter(g=>db.orders[g]).slice(0,3);
@@ -2693,7 +2716,7 @@ $('processServi').addEventListener('click',async()=>{
   const rows=parseTSV($('txtServi').value);if(!rows.length)return toast('No hay datos para procesar');if(!validateBaseBeforeProcess(rows,'servi','resServi'))return;
   const btn=$('processServi');btn.disabled=true;btn.textContent='Comprobando Firebase...';
   try{
-    // v75: no toca datos locales hasta comprobar lectura + escritura real contra el servidor.
+    // v76: no toca datos locales hasta comprobar lectura + escritura real contra el servidor.
     try{await firebaseServiPreflight(t=>btn.textContent=t)}catch(err){
       setCloudStatus('Firebase: no disponible para barrido','error');
       showResult('resServi',`<b style="color:#b42318">No se procesó la base.</b> Firebase no respondió correctamente: ${escapeHtml(firebaseErrorText(err))}. Conserva la base y vuelve a intentar.`);
@@ -2709,7 +2732,7 @@ $('processServi').addEventListener('click',async()=>{
     setServiPending(orderTargets,sourceTargets);
     let ok=true,verified=true;
     if(orderTargets.length||sourceTargets.length){
-      ok=await syncExplicitBulkNow('servi',{orderGuides:orderTargets,serviGuides:sourceTargets,batchSize:200,onProgress:p=>{if(p.phase==='write')btn.textContent=`Sincronizando ${p.done}/${p.total}`;else if(p.phase==='signal')btn.textContent='Verificando...'}});
+      ok=await syncExplicitBulkNow('servi',{orderGuides:orderTargets,serviGuides:sourceTargets,batchSize:100,onProgress:p=>{if(p.phase==='write')btn.textContent=`Sincronizando ${p.done}/${p.total}`;else if(p.phase==='signal')btn.textContent='Verificando...'}});
       if(ok&&orderTargets.length){btn.textContent='Verificando Firebase...';try{verified=await verifyServiCloud(orderTargets)}catch(e){verified=false}}
       ok=ok&&verified;
     }
@@ -2720,7 +2743,8 @@ $('processServi').addEventListener('click',async()=>{
       $('txtServi').value='';
     }else{
       setServiPending(orderTargets,sourceTargets);
-      showResult('resServi',`Modificados localmente: <b>${r.updated}</b> · Pendientes de Firebase: <b>${orderTargets.length}</b> · <b style="color:#b42318">NO confirmado en Firebase.</b> La base queda conservada. Al volver a pulsar Actualizar status, estos pendientes se reintentan aunque localmente ya se vean actualizados.`);
+      await resetFirebaseTransport();
+      showResult('resServi',`Modificados localmente: <b>${r.updated}</b> · Pendientes de Firebase: <b>${orderTargets.length}</b> · <b style="color:#b42318">NO confirmado en Firebase.</b> La base queda conservada. La conexión fue reiniciada automáticamente; vuelve a pulsar Actualizar status una sola vez para reintentar únicamente los pendientes.`);
     }
   }finally{btn.disabled=false;setTimeout(()=>{btn.textContent='Actualizar status'},250)}
 });
@@ -2742,7 +2766,7 @@ async function processFile(inputId,type,resultId){
       r=processServiRows(rows);renderAll();
       const p=serviPendingState(),mismatch=serviCloudMismatchGuides(r.matchedGuides||[]),orderTargets=[...new Set([...(r.changedGuides||[]),...(p.orders||[]),...mismatch])],sourceTargets=[...new Set([...(r.sourceGuides||[]),...(p.sources||[])])];
       setServiPending(orderTargets,sourceTargets);
-      ok=await syncExplicitBulkNow('servi',{orderGuides:orderTargets,serviGuides:sourceTargets,batchSize:200});
+      ok=await syncExplicitBulkNow('servi',{orderGuides:orderTargets,serviGuides:sourceTargets,batchSize:100});
       if(ok&&orderTargets.length)ok=await verifyServiCloud(orderTargets);
       if(ok)clearServiPending(orderTargets,sourceTargets);
     }
