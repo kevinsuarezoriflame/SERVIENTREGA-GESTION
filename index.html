@@ -40,7 +40,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .card,.panel,.kpi-canales,.grafico,.efectividad-box{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;border:1px solid #b9d7cd;background:#fff;color:var(--ink);border-radius:9px;padding:0 12px;font-weight:800;font-size:11px}.btn-green{background:var(--sv);color:#fff;border-color:var(--sv)}.btn-outline{background:#fff;color:var(--deep);border:1.5px solid var(--deep)}.btn-danger{background:#fff2f2;color:#ba3f3f;border-color:#e9bcbc}.btn:disabled{opacity:.45;cursor:not-allowed}
 .tabs-owners{display:flex;gap:7px;flex-wrap:wrap;padding:10px;border-bottom:1px solid #e7f1ed}.tabs-owners button{border:1px solid #bddbd0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11px;font-weight:850}.tabs-owners button.active{background:var(--sv);border-color:var(--sv);color:#fff}.owner-count{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;margin-left:6px;border-radius:999px;background:#DFF3E9;color:var(--deep);font-size:9px;font-weight:950;vertical-align:middle}.tabs-owners button.active .owner-count{background:#fff;color:var(--deep)}.tabs-owners button.unassigned-tab{border-color:#d5aa46;background:#fff8e8;color:#775815}.tabs-owners button.unassigned-tab.active{background:#775815;border-color:#775815;color:#fff}.owner-assign{min-width:120px;height:27px;border:1px solid #d5aa46;border-radius:7px;background:#fffdf7;font-size:10px;font-weight:750;padding:0 6px}
-.toolbar{padding:9px 10px;display:grid;grid-template-columns:130px 142px 105px 112px auto minmax(165px,.92fr) auto minmax(145px,.82fr) minmax(175px,1fr) auto;gap:7px;align-items:end;overflow-x:auto;overflow-y:hidden}.toolbar>.field{min-width:0}.field label{display:block;font-size:9px;font-weight:850;margin-bottom:4px;color:#50625b;white-space:nowrap}.field input,.field select{height:32px;border:1px solid #b9d7cd;border-radius:9px;background:#fff;padding:0 8px;min-width:0;width:100%;font-size:11px}.field.search input{min-width:0}.toolbar>.btn{height:32px;padding:0 10px;white-space:nowrap;font-size:10px}
+.toolbar{padding:9px 10px;display:grid;grid-template-columns:122px 138px 128px 96px 104px auto minmax(142px,.78fr) auto minmax(122px,.66fr) minmax(185px,1fr) auto;gap:7px;align-items:end;overflow-x:auto;overflow-y:hidden;min-width:1320px}.toolbar>.field{min-width:0}.field label{display:block;font-size:9px;font-weight:850;margin-bottom:4px;color:#50625b;white-space:nowrap}.field input,.field select{height:32px;border:1px solid #b9d7cd;border-radius:9px;background:#fff;padding:0 8px;min-width:0;width:100%;font-size:11px}.field.search input{min-width:0}.toolbar>.btn{height:32px;padding:0 10px;white-space:nowrap;font-size:10px}
 .table-wrap{overflow:auto;max-height:calc(100vh - 210px);border-top:1px solid #eef4f1}
 /* Columnas congeladas de Pedidos */
 #ordersTable th:nth-child(1),#ordersTable td:nth-child(1){position:sticky;left:0;width:92px;min-width:92px;max-width:92px}
@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v67</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v77</span></div>
 </aside>
 
 <main class="main">
@@ -246,6 +246,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <div class="toolbar">
       <div class="field"><label>Mes</label><select id="pMonth"></select></div>
       <div class="field"><label>Fecha guía</label><input type="date" id="pDate"></div>
+      <div class="field"><label>Provincia</label><select id="pProvince"><option value="">Todas</option></select></div>
       <div class="field"><label>Canal</label><select id="pChannel"><option value="">Todos</option><option>PUP</option><option>HD</option><option>SPO</option></select></div>
       <div class="field"><label>Estado</label><select id="pStatus"><option value="">Todos</option><option value="pending">No entregados</option><option value="delivered">Entregados</option></select></div>
       <button class="btn btn-green" id="copyGuides" title="Copiar únicamente las guías de la vista actual">📋 Copiar guías</button>
@@ -663,7 +664,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v76.20261002.1';
+const APP_BUILD='v77.20261008.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -2171,7 +2172,7 @@ function debounceOrdersRender(){
   ordersFilterTimer=setTimeout(()=>renderOrders(true),220);
 }
 function orderFilterSignature(){
-  return [activeOwner,$('pMonth')?.value||'',$('pDate')?.value||'',$('pChannel')?.value||'',$('pStatus')?.value||'',$('pServiStatus')?.value||'',$('pClaim')?.value||'',$('pSearch')?.value||'',dateSort,daysSort].join('|');
+  return [activeOwner,$('pMonth')?.value||'',$('pDate')?.value||'',$('pProvince')?.value||'',$('pChannel')?.value||'',$('pStatus')?.value||'',$('pServiStatus')?.value||'',$('pClaim')?.value||'',$('pSearch')?.value||'',dateSort,daysSort].join('|');
 }
 function ensureClaimFilterOptions(){
   const el=$('pClaim');if(!el)return;const old=el.value;
@@ -2196,9 +2197,23 @@ function ensureServiStatusOptions(){
   list.innerHTML=statuses.map(x=>`<option value="${escapeHtml(x)}"></option>`).join('');
 }
 
+function ensureProvinceOptions(){
+  const el=$('pProvince');if(!el)return;
+  const old=el.value,m=$('pMonth')?.value||'';
+  const provinces=[...new Set(
+    Object.values(db.orders||{})
+      .filter(o=>!m||monthKey(o.fechaGuia)===m)
+      .map(o=>String(o.provincia||'').trim())
+      .filter(Boolean)
+  )].sort((a,b)=>a.localeCompare(b,'es'));
+  el.innerHTML='<option value="">Todas</option>'+provinces.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+  if(provinces.includes(old))el.value=old;
+}
+
 function ownerCountRows(){
   const m=$('pMonth')?.value||'',
         d=$('pDate')?.value||'',
+        pv=$('pProvince')?.value||'',
         c=$('pChannel')?.value||'',
         s=$('pStatus')?.value||'',
         ss=$('pServiStatus')?.value||'',
@@ -2208,6 +2223,7 @@ function ownerCountRows(){
   return Object.values(db.orders||{}).filter(o=>
     (!m||monthKey(o.fechaGuia)===m)&&
     (!d||o.fechaGuia===d)&&
+    (!pv||N(o.provincia||'')===N(pv))&&
     (!c||o.canal===c)&&
     (!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&
     (!ss||N(o.status||'').includes(N(ss)))&&
@@ -2266,8 +2282,8 @@ async function applyBulkClaim(){
 }
 
 function orderRows(){
-  const m=$('pMonth').value,d=$('pDate').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);
-  let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||N(o.status||'').includes(N(ss)))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatarioOrigen,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));
+  const m=$('pMonth').value,d=$('pDate').value,pv=$('pProvince').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);
+  let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!pv||N(o.provincia||'')===N(pv))&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||N(o.status||'').includes(N(ss)))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatarioOrigen,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));
   if(daysSort){
     // Rendimiento: DÍAS se calcula una sola vez por pedido, no en cada comparación del sort.
     const ranked=rows.map(o=>({o,d:deliveryDaysForOrder(o)}));
@@ -2507,7 +2523,7 @@ function renderContacts(){const q=N($('contactSearch').value),rows=Object.entrie
 function renderAll(){
   ensureMonthSelects();
   const page=activePageId();
-  if(page==='pedidos'){ensureClaimFilterOptions();ensureServiStatusOptions();renderOrders()}
+  if(page==='pedidos'){ensureClaimFilterOptions();ensureProvinceOptions();ensureServiStatusOptions();renderOrders()}
   else if(page==='infobip'){ensureInfoOwnerOptions();renderInfo()}
   else if(page==='config')renderConfig();
   else if(page==='dashboard')renderDashboard();
@@ -2594,12 +2610,12 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){ensureClaimFilterOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){ensureClaimFilterOptions();ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
-$('pMonth').addEventListener('change',()=>{ensureServiStatusOptions();renderOrders(true)});
-['pDate','pChannel','pStatus','pClaim'].forEach(id=>$(id).addEventListener('change',()=>renderOrders(true)));
+$('pMonth').addEventListener('change',()=>{ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)});
+['pDate','pProvince','pChannel','pStatus','pClaim'].forEach(id=>$(id).addEventListener('change',()=>renderOrders(true)));
 $('pServiStatus').addEventListener('input',debounceOrdersRender);
 $('bulkClaimToggle').addEventListener('click',()=>setBulkClaimMode(!bulkClaimMode));
 $('bulkClaimCancel').addEventListener('click',()=>setBulkClaimMode(false));
@@ -2616,7 +2632,7 @@ $('ordersScrollWrap')?.addEventListener('scroll',()=>{
   }
 });
 $('copyGuides').addEventListener('click',async()=>{const rows=orderRows(),guias=rows.map(o=>String(o.guia||'').trim()).filter(Boolean);if(!guias.length){toast('No hay guías con estos filtros');return}const text=guias.join('\n');try{await navigator.clipboard.writeText(text)}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}toast(guias.length+' guías copiadas')});
-$('clearFilters').addEventListener('click',()=>{$('pDate').value='';$('pChannel').value='';$('pStatus').value='';$('pServiStatus').value='';$('pClaim').value='';$('pSearch').value='';dateSort='desc';bulkClaimSelected.clear();updateBulkClaimUI();ensureServiStatusOptions();renderOrders(true)});
+$('clearFilters').addEventListener('click',()=>{$('pDate').value='';$('pProvince').value='';$('pChannel').value='';$('pStatus').value='';$('pServiStatus').value='';$('pClaim').value='';$('pSearch').value='';dateSort='desc';bulkClaimSelected.clear();updateBulkClaimUI();ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)});
 document.addEventListener('click',e=>{const btn=e.target.closest('[data-province-view]');if(!btn)return;const mode=btn.dataset.provinceView;if(!mode||mode===provinceListMode)return;provinceListMode=mode;renderProvincePanel(dashboardData())});
 const gestionFloatingTip=$('gestionFloatingTip');
 function showGestionTip(btn,text){
@@ -3042,7 +3058,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v64';
+      const bs=$('buildStatus');if(bs)bs.textContent='v77';
     }
   }catch(e){
     console.warn('Build check',e);
