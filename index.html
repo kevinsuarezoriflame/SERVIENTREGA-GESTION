@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>Gestión Servientrega · Oriflame</title>
+<title>Gestión Servientrega · Oriflame · sincronización optimizada</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
@@ -1181,7 +1181,7 @@ async function commitOps(ops,onProgress=null,batchSize=400){
     }
     await firebaseTimeout(batch.commit(),45000,'Firebase (lote '+(Math.floor(i/batchSize)+1)+')');
     done+=chunk.length;
-    if(typeof onProgress==='function')onProgress(done,ops.length);
+    if(typeof onProgress==='function')onProgress(done,ops.length,chunk);
   }
 }
 function diffMapOps(group,collection,map){
@@ -1334,15 +1334,14 @@ async function ensureActiveOrderSchema(){
   if(!firebaseReady||!fsDB)return {migrated:0};
   const markerRef=fsDB.collection(FB.sync).doc('schema_v41');
   try{
-    const marker=await markerRef.get({source:'server'});
+    const marker=await firebaseTimeout(markerRef.get({source:'server'}),12000,'Validación del esquema de pedidos');
     const md=marker.exists?stripWriteGuard(marker.data()||{}):{};
     if(Number(md.activeOrderSchema||0)>=ACTIVE_ORDER_SCHEMA)return {migrated:0};
 
     // Se ejecuta una sola vez para compatibilizar documentos creados por v40 o anteriores.
     // Después, las sesiones normales solo leen pedidos activos.
-    const snap=await fsDB.collection(FB.orders).get({source:'server'});
+    const snap=await firebaseTimeout(fsDB.collection(FB.orders).get({source:'server'}),30000,'Lectura puntual de esquema antiguo');
     let migrated=0,batch=fsDB.batch(),n=0;
-    const commits=[];
     for(const doc of snap.docs){
       const raw=stripWriteGuard(doc.data()||{});
       const key=String(raw.guia||decodeURIComponent(doc.id));
@@ -1350,10 +1349,9 @@ async function ensureActiveOrderSchema(){
       if(raw._active===active)continue;
       batch.set(doc.ref,guardedData({guia:key,_active:active}),{merge:true});
       migrated++;n++;
-      if(n>=400){commits.push(batch.commit());batch=fsDB.batch();n=0}
+      if(n>=400){await firebaseTimeout(batch.commit(),45000,'Migración pedidos · lote confirmado');batch=fsDB.batch();n=0}
     }
-    if(n)commits.push(batch.commit());
-    if(commits.length)await Promise.all(commits);
+    if(n)await firebaseTimeout(batch.commit(),45000,'Migración pedidos · lote final');
     await markerRef.set(guardedData({activeOrderSchema:ACTIVE_ORDER_SCHEMA,migrated,updatedAt:Date.now(),build:APP_BUILD}),{merge:true});
     return {migrated};
   }catch(err){
@@ -1514,8 +1512,8 @@ function startDeltaOrdersListener(){
       localCache();
       if(!snap.metadata.fromCache){
         finishOrdersServerReady();
-        if(changed)renderAll();
-        else if(!ordersInitialSnapshot)renderAll();
+        if(changed)scheduleCloudRender();
+        else if(!ordersInitialSnapshot)scheduleCloudRender();
       }else if(changed&&ordersServerSnapshotSeen)renderAll();
     }catch(err){
       cloudApplying=false;console.error('Orders delta snapshot',err);setCloudStatus('Firebase: error de pantalla','error');
@@ -1942,8 +1940,37 @@ function clearServiPending(orderGuides=[],sourceGuides=[]){
   p.at=(p.orders.length||p.sources.length)?Date.now():0;localCache();
 }
 function serviCloudMismatchGuides(guides=[]){
-  const out=[];for(const guia of [...new Set((guides||[]).map(String).filter(Boolean))]){const o=db.orders[guia];if(!o)continue;const local=stableJSON(mapPayload('orders',guia,o));if(cloudFP.orders[guia]!==local)out.push(guia)}return out;
+  const out=[];for(const guia of [...new Set((guides||[]).map(String).filter(Boolean))]){const o=db.orders[guia];if(!o)continue;const fp=cloudFP.orders[guia];if(fp===undefined)continue;let remote=null;try{remote=JSON.parse(fp)}catch(e){};if(remote&&['status','fechaEntrega','lockedDelivered'].some(k=>String(remote[k]??'')!==String(o[k]??'')))out.push(guia)}return out;
 }
+// Solo para recuperar cargas previas NO confirmadas: consulta guías pendientes por bloques.
+// Comparar STATUS/fecha/entregado evita reescribir cientos de documentos idénticos.
+// Si una consulta falla, NO se descarta ninguna guía pendiente.
+async function reconcilePriorServiPendingWithServer(targets=[]){
+  const prior=new Set((serviPendingState().orders||[]).map(String));
+  const candidates=[...new Set((targets||[]).map(String))].filter(g=>prior.has(g)&&db.orders[g]);
+  if(!candidates.length)return targets;
+  const confirmed=new Set(),serverFingerprints={};
+  try{
+    for(let i=0;i<candidates.length;i+=30){
+      const group=candidates.slice(i,i+30),ids=group.map(safeDocId);
+      const snap=await firebaseTimeout(fsDB.collection(FB.orders)
+        .where(firebase.firestore.FieldPath.documentId(),'in',ids).get({source:'server'}),15000,'Revisión de pendientes Servientrega');
+      snap.forEach(doc=>{
+        const raw=stripWriteGuard(doc.data()||{}),g=String(raw.guia||decodeURIComponent(doc.id));
+        const local=db.orders[g];if(!local)return;
+        if(['status','fechaEntrega','lockedDelivered'].every(k=>String(raw[k]??'')===String(local[k]??''))){
+          confirmed.add(g);serverFingerprints[g]=stableJSON(mapPayload('orders',g,raw));
+        }
+      });
+    }
+  }catch(err){console.warn('No se pudo verificar toda la cola anterior; permanece pendiente',err);return targets}
+  if(confirmed.size){
+    for(const g of confirmed)cloudFP.orders[g]=serverFingerprints[g];
+    clearServiPending([...confirmed],[]);
+  }
+  return targets.filter(g=>!confirmed.has(String(g)));
+}
+
 async function firebaseServiPreflight(onProgress=null){
   if(!firebaseReady||!fsDB)throw new Error('Firebase no está conectado');
   if(typeof onProgress==='function')onProgress('Comprobando Firebase...');
@@ -1954,12 +1981,12 @@ async function firebaseServiPreflight(onProgress=null){
   // una sola vez y repetimos la lectura.
   const ref=fsDB.collection(FB.sync).doc('state');
   try{
-    await firebaseTimeout(ref.get({source:'server'}),25000,'Prueba de conexión Firebase');
+    await firebaseTimeout(ref.get({source:'server'}),15000,'Prueba de conexión Firebase');
   }catch(firstErr){
     if(typeof onProgress==='function')onProgress('Reiniciando conexión Firebase...');
     await resetFirebaseTransport();
     if(typeof onProgress==='function')onProgress('Comprobando Firebase...');
-    await firebaseTimeout(ref.get({source:'server'}),25000,'Prueba de conexión Firebase');
+    await firebaseTimeout(ref.get({source:'server'}),15000,'Prueba de conexión Firebase');
   }
   return true;
 }
@@ -2000,7 +2027,28 @@ async function syncExplicitBulkNow(kind,{orderGuides=[],tcGuides=[],serviGuides=
     for(const socio of contactSocios){const d=db.contacts[socio];if(d)ops.push({type:'set',collection:FB.contacts,key:socio,data:mapPayload('contacts',socio,d)})}
     for(const guia of guidePhoneGuides){const d=db.sources.guidePhones[guia];if(d&&!db.orders[guia])ops.push({type:'set',collection:FB.guidePhones,key:guia,data:mapPayload('guidePhones',guia,d)})}
     for(const key of snapshotKeys){const d=db.snapshots[key];if(d)ops.push({type:'set',collection:FB.snapshots,key,data:mapPayload('snapshots',key,d)})}
-    if(ops.length)await commitOps(ops,(done,total)=>{setCloudStatus(`Firebase: sincronizando ${kind} ${done}/${total}...`,'saving');if(typeof onProgress==='function')onProgress({phase:'write',done,total})},batchSize);
+    if(ops.length)await commitOps(ops,(done,total,chunk)=>{
+      // Cada commit() confirmado libera únicamente las guías de ese lote.
+      // Si el lote siguiente falla, no reescribimos los anteriores.
+      if(kind==='servi'&&chunk?.length){
+        const confirmedOrders=[],confirmedSources=[];
+        for(const op of chunk){
+          if(op.collection===FB.orders&&op.type==='set'&&db.orders[op.key]&&
+             stableJSON(mapPayload('orders',op.key,db.orders[op.key]))===stableJSON(op.data)){
+            confirmedOrders.push(op.key);
+            cloudFP.orders[op.key]=stableJSON(op.data);
+          }
+          if(op.collection===FB.servi&&op.type==='set'&&db.sources.servi[op.key]&&
+             stableJSON(mapPayload('servi',op.key,db.sources.servi[op.key]))===stableJSON(op.data)){
+            confirmedSources.push(op.key);
+            cloudFP.servi[op.key]=stableJSON(op.data);
+          }
+        }
+        if(confirmedOrders.length||confirmedSources.length)clearServiPending(confirmedOrders,confirmedSources);
+      }
+      setCloudStatus(`Firebase: sincronizando ${kind} ${done}/${total}...`,'saving');
+      if(typeof onProgress==='function')onProgress({phase:'write',done,total});
+    },batchSize);
     for(const guia of orderGuides)if(db.orders[guia])cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,db.orders[guia]));
     for(const guia of deleteOrderGuides)delete cloudFP.orders[guia];
     for(const guia of tcGuides)if(db.sources.tc[guia]&&!db.orders[guia])cloudFP.tc[guia]=stableJSON(mapPayload('tc',guia,db.sources.tc[guia]));
@@ -2743,7 +2791,8 @@ $('processServi').addEventListener('click',async()=>{
     const r=processServiRows(rows);renderAll();
     const pending=serviPendingState();
     const mismatch=serviCloudMismatchGuides(r.matchedGuides||[]);
-    const orderTargets=[...new Set([...(r.changedGuides||[]),...(pending.orders||[]),...mismatch])];
+    let orderTargets=[...new Set([...(r.changedGuides||[]),...(pending.orders||[]),...mismatch])];
+    orderTargets=await reconcilePriorServiPendingWithServer(orderTargets);
     const sourceTargets=[...new Set([...(r.sourceGuides||[]),...(pending.sources||[])])];
     setServiPending(orderTargets,sourceTargets);
     let ok=true,verified=true;
@@ -2780,7 +2829,10 @@ async function processFile(inputId,type,resultId){
     if(type==='servi'){
       await firebaseServiPreflight();
       r=processServiRows(rows);renderAll();
-      const p=serviPendingState(),mismatch=serviCloudMismatchGuides(r.matchedGuides||[]),orderTargets=[...new Set([...(r.changedGuides||[]),...(p.orders||[]),...mismatch])],sourceTargets=[...new Set([...(r.sourceGuides||[]),...(p.sources||[])])];
+      const p=serviPendingState(),mismatch=serviCloudMismatchGuides(r.matchedGuides||[]);
+      let orderTargets=[...new Set([...(r.changedGuides||[]),...(p.orders||[]),...mismatch])];
+      orderTargets=await reconcilePriorServiPendingWithServer(orderTargets);
+      const sourceTargets=[...new Set([...(r.sourceGuides||[]),...(p.sources||[])])];
       setServiPending(orderTargets,sourceTargets);
       ok=await syncExplicitBulkNow('servi',{orderGuides:orderTargets,serviGuides:sourceTargets,batchSize:100});
       if(ok&&orderTargets.length)ok=await verifyServiCloud(orderTargets);
