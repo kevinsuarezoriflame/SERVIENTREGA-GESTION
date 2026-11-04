@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v77</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v78</span></div>
 </aside>
 
 <main class="main">
@@ -632,6 +632,8 @@ const CACHE_DB_NAME='servientrega_oriflame_cache_v53';
 const CACHE_STORE='kv';
 const SYNC_WATERMARK_KEY='servientrega_orders_watermark_v53';
 const DELTA_SAFETY_MS=5*60*1000;
+const LOADED_MONTHS_KEY='servientrega_loaded_months_v78';
+const MONTH_DISCOVERY_SPAN=8;
 const ROW_BATCH_SIZE=120;
 const SAFETY_BACKUP_KEY='servientrega_oriflame_safety_backup_v34';
 const DEFAULT_ZONES=[{"zone": "AZUAY", "owner": "Alba"}, {"zone": "CUENCA", "owner": "Alba"}, {"zone": "LOJA- EL SAGRARIO", "owner": "Alba"}, {"zone": "CHORDELEG", "owner": "Alba"}, {"zone": "BOLIVAR", "owner": "Alba"}, {"zone": "CANAR", "owner": "Alba"}, {"zone": "CAÑAR", "owner": "Alba"}, {"zone": "AZOGUEZ", "owner": "Alba"}, {"zone": "CARCHI", "owner": "Alba"}, {"zone": "RIOBAMBA", "owner": "Alba"}, {"zone": "GALAPAGOS", "owner": "Alba"}, {"zone": "LOJA", "owner": "Alba"}, {"zone": "LOS RIOS", "owner": "Alba"}, {"zone": "EL CHACO", "owner": "Alba"}, {"zone": "NAPO", "owner": "Alba"}, {"zone": "PASTAZA", "owner": "Alba"}, {"zone": "PUYO", "owner": "Alba"}, {"zone": "PICHINCHA", "owner": "Alba"}, {"zone": "QUITO", "owner": "Alba"}, {"zone": "VALLE DE LOS CHILLOS", "owner": "Alba"}, {"zone": "SANTA ELENA", "owner": "Alba"}, {"zone": "TUNGURAHUA", "owner": "Alba"}, {"zone": "AMBATO", "owner": "Alba"}, {"zone": "PROGRESO", "owner": "Alba"}, {"zone": "GUARANDA", "owner": "Alba"}, {"zone": "COTOPAXI", "owner": "Alba"}, {"zone": "DURAN", "owner": "Daysi"}, {"zone": "ZAMORA CHINCHIPE", "owner": "Daysi"}, {"zone": "GUAYAS", "owner": "Daysi"}, {"zone": "ZAMORA", "owner": "Daysi"}, {"zone": "CHIMBORAZO", "owner": "Daysi"}, {"zone": "EL GUANO", "owner": "Daysi"}, {"zone": "MORONA SANTIAGO", "owner": "Daysi"}, {"zone": "EL ORO", "owner": "Daysi"}, {"zone": "ELORO", "owner": "Daysi"}, {"zone": "ESMERALDAS", "owner": "Daysi"}, {"zone": "COLIMES", "owner": "Daysi"}, {"zone": "GUAYAQUIL", "owner": "Daysi"}, {"zone": "MILAGRO", "owner": "Daysi"}, {"zone": "POSORJA", "owner": "Daysi"}, {"zone": "NARANJITO", "owner": "Daysi"}, {"zone": "TENGUEL", "owner": "Daysi"}, {"zone": "NARANJAL", "owner": "Daysi"}, {"zone": "PEDRO CARBO", "owner": "Daysi"}, {"zone": "GUAYAQUILHUERTA FRENTE A PARADA DE LA METROVIA", "owner": "Daysi"}, {"zone": "EL TRIUNFO", "owner": "Daysi"}, {"zone": "DAULE", "owner": "Daysi"}, {"zone": "SAMBORONDON", "owner": "Daysi"}, {"zone": "VIRGEN DE FATIMA KM 26", "owner": "Daysi"}, {"zone": "PALESTINA", "owner": "Daysi"}, {"zone": "LOMAS DE SARGENTILLO", "owner": "Daysi"}, {"zone": "ISIDRO AYORA", "owner": "Daysi"}, {"zone": "BALZAR", "owner": "Daysi"}, {"zone": "SALITRE", "owner": "Daysi"}, {"zone": "YAGUACHI", "owner": "Daysi"}, {"zone": "BUCAY", "owner": "Daysi"}, {"zone": "IMBABURA", "owner": "Daysi"}, {"zone": "IBARRA", "owner": "Daysi"}, {"zone": "MANABI", "owner": "Daysi"}, {"zone": "JIPIJAPA", "owner": "Daysi"}, {"zone": "EL CARMEN", "owner": "Daysi"}, {"zone": "MOMPICHE", "owner": "Daysi"}, {"zone": "ORELLANA", "owner": "Daysi"}, {"zone": "SANTO DOMINGO", "owner": "Daysi"}, {"zone": "SANTO DOMINGO DE LOS TSACHILAS", "owner": "Daysi"}, {"zone": "SUCUMBIOS", "owner": "Daysi"}, {"zone": "PIMAMPIRO", "owner": "Daysi"}, {"zone": "JUJAN", "owner": "Daysi"}];
@@ -654,6 +656,7 @@ let bulkClaimMode=false,bulkClaimSelected=new Set(),provinceMapToken=0,ecuadorGe
 let ordersVisibleLimit=ROW_BATCH_SIZE,lastOrdersFilterSignature='',ordersFilterTimer=null,ordersLastTotal=0;
 let cacheDBPromise=null,cacheSaveTimer=null,cacheHydrated=false,memorySafetyBackup=null;
 let ordersUnsub=null,ordersListenerMode='',ordersWatermark=0;
+let knownOrderMonths=new Set(),loadedOrderMonths=new Set(),monthLoadPromises=new Map();
 const $=id=>document.getElementById(id);
 
 const FIREBASE_CONFIG={
@@ -664,7 +667,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v77.20261008.1';
+const APP_BUILD='v78.20261104.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -760,6 +763,7 @@ async function hydrateDBFromIndexedDB(){
     if(ok)try{localStorage.removeItem(STORAGE_KEY)}catch(e){}
   }
   try{const w=Number(localStorage.getItem(SYNC_WATERMARK_KEY)||0);if(Number.isFinite(w)&&w>0)ordersWatermark=w}catch(e){}
+  loadLoadedMonthsState();
 }
 function scheduleCacheSave(){
   clearTimeout(cacheSaveTimer);
@@ -992,15 +996,9 @@ async function fetchOrderFromServer(guia){
 }
 async function refreshOrdersFromServer(){
   if(!firebaseReady)return;
+  const month=$('pMonth')?.value||$('iMonth')?.value||openMonths()[0]||calendarMonth(0);
   try{
-    const snap=await fsDB.collection(FB.orders).where('_active','==',true).get({source:'server'}),fresh={};
-    snap.forEach(doc=>{const raw=doc.data()||{},d=stripWriteGuard(raw);if(d._deleted)return;const key=String(d.guia||decodeURIComponent(doc.id));fresh[key]=d});
-    db.orders=fresh;cloudFP.orders={};let maxSeen=0;
-    for(const [key,d] of Object.entries(fresh)){cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n}
-    if(maxSeen>0)writeOrdersWatermark(maxSeen);
-    localCache();
-    const page=activePageId();
-    if(page==='pedidos')renderOrders();else if(page==='infobip')renderInfo();else if(page==='dashboard')renderDashboard();
+    await loadOrdersMonthOnce(month,{force:true});
     setCloudStatus('Firebase: EN VIVO · '+liveTime());
   }catch(err){console.error('Refresh orders server',err)}
 }
@@ -1337,26 +1335,18 @@ async function ensureActiveOrderSchema(){
     const marker=await firebaseTimeout(markerRef.get({source:'server'}),12000,'Validación del esquema de pedidos');
     const md=marker.exists?stripWriteGuard(marker.data()||{}):{};
     if(Number(md.activeOrderSchema||0)>=ACTIVE_ORDER_SCHEMA)return {migrated:0};
-
-    // Se ejecuta una sola vez para compatibilizar documentos creados por v40 o anteriores.
-    // Después, las sesiones normales solo leen pedidos activos.
-    const snap=await firebaseTimeout(fsDB.collection(FB.orders).get({source:'server'}),30000,'Lectura puntual de esquema antiguo');
-    let migrated=0,batch=fsDB.batch(),n=0;
-    for(const doc of snap.docs){
-      const raw=stripWriteGuard(doc.data()||{});
-      const key=String(raw.guia||decodeURIComponent(doc.id));
-      const active=!(raw._deleted===true||raw._active===false);
-      if(raw._active===active)continue;
-      batch.set(doc.ref,guardedData({guia:key,_active:active}),{merge:true});
-      migrated++;n++;
-      if(n>=400){await firebaseTimeout(batch.commit(),45000,'Migración pedidos · lote confirmado');batch=fsDB.batch();n=0}
-    }
-    if(n)await firebaseTimeout(batch.commit(),45000,'Migración pedidos · lote final');
-    await markerRef.set(guardedData({activeOrderSchema:ACTIVE_ORDER_SCHEMA,migrated,updatedAt:Date.now(),build:APP_BUILD}),{merge:true});
-    return {migrated};
+    // v78: nunca hacer un barrido completo de servientrega_pedidos para migrar esquema.
+    // La lectura operativa se hace por fechaGuia/mes y los documentos nuevos ya llevan _active.
+    await markerRef.set(guardedData({
+      activeOrderSchema:ACTIVE_ORDER_SCHEMA,
+      migrated:0,
+      mode:'v78-no-full-scan',
+      updatedAt:Date.now(),
+      build:APP_BUILD
+    }),{merge:true});
+    return {migrated:0};
   }catch(err){
-    console.warn('Active order schema migration',err);
-    // Si la cuota o la red impiden migrar, usamos el listener legado como respaldo.
+    console.warn('Active order schema validation',err);
     return {migrated:0,error:err};
   }
 }
@@ -1459,6 +1449,99 @@ async function hydrateGuidesFromCloudSources(guides){
   return changed;
 }
 
+function cachedOrderMonths(){
+  return [...new Set(Object.values(db.orders||{}).map(o=>monthKey(o.fechaGuia)).filter(Boolean))].sort().reverse();
+}
+function loadLoadedMonthsState(){
+  const cached=cachedOrderMonths(),cachedSet=new Set(cached);
+  try{
+    const arr=JSON.parse(localStorage.getItem(LOADED_MONTHS_KEY)||'[]');
+    if(Array.isArray(arr))for(const m of arr){
+      const v=String(m||'');if(/^\d{4}-\d{2}$/.test(v)&&cachedSet.has(v))loadedOrderMonths.add(v);
+    }
+  }catch(e){}
+  for(const m of cached)knownOrderMonths.add(m);
+  // Migración segura desde v77: si existe watermark, esa caché se originó de una
+  // base oficial completa + listener delta. La damos por completa una sola vez.
+  if(!loadedOrderMonths.size&&meaningfulLocal(db)&&readOrdersWatermark()>0){
+    for(const m of cached)loadedOrderMonths.add(m);
+    saveLoadedMonthsState();
+  }
+}
+function saveLoadedMonthsState(){
+  try{localStorage.setItem(LOADED_MONTHS_KEY,JSON.stringify([...loadedOrderMonths].sort()))}catch(e){}
+}
+function monthBounds(month){
+  const m=/^(\d{4})-(\d{2})$/.exec(String(month||''));if(!m)return null;
+  const y=Number(m[1]),mo=Number(m[2]);
+  const next=mo===12?`${y+1}-01-01`:`${y}-${String(mo+1).padStart(2,'0')}-01`;
+  return {start:`${y}-${String(mo).padStart(2,'0')}-01`,end:next};
+}
+function calendarMonth(offset=0){
+  const d=new Date();d.setDate(1);d.setMonth(d.getMonth()+offset);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+async function discoverRecentOrderMonths(){
+  if(!firebaseReady||!fsDB)return;
+  const probes=[];
+  for(let i=0;i<MONTH_DISCOVERY_SPAN;i++){
+    const month=calendarMonth(-i),b=monthBounds(month);if(!b)continue;
+    probes.push(
+      fsDB.collection(FB.orders)
+        .where('fechaGuia','>=',b.start).where('fechaGuia','<',b.end).limit(1)
+        .get({source:'server'})
+        .then(snap=>{if(!snap.empty)knownOrderMonths.add(month)})
+        .catch(err=>console.warn('Month probe',month,err))
+    );
+  }
+  await Promise.all(probes);
+  for(const m of cachedOrderMonths())knownOrderMonths.add(m);
+}
+async function loadOrdersMonthOnce(month,{force=false}={}){
+  month=String(month||'');if(!firebaseReady||!fsDB||!month)return false;
+  if(db.snapshots?.[month])return true;
+  if(!force&&loadedOrderMonths.has(month))return true;
+  if(monthLoadPromises.has(month))return monthLoadPromises.get(month);
+  const task=(async()=>{
+    const b=monthBounds(month);if(!b)return false;
+    const seedStartedAt=Date.now();
+    setCloudStatus(`Firebase: cargando ${monthName(month)}...`,'saving');
+    const snap=await firebaseTimeout(
+      fsDB.collection(FB.orders).where('fechaGuia','>=',b.start).where('fechaGuia','<',b.end).get({source:'server'}),
+      30000,`Carga ${monthName(month)}`
+    );
+    const serverIds=new Set(),pending=new Set(serviPendingState().orders||[]);
+    let maxSeen=0;
+    snap.forEach(doc=>{
+      const raw=doc.data()||{},d=stripWriteGuard(raw),key=String(d.guia||decodeURIComponent(doc.id));
+      if(d._deleted===true||d._active===false)return;
+      serverIds.add(key);db.orders[key]=d;cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
+      const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n;
+    });
+    // Si el mes ya había sido confirmado antes, una recarga forzada sí puede retirar
+    // registros que ya no existen en el servidor. Nunca retiramos pendientes locales.
+    if(force||loadedOrderMonths.has(month)){
+      for(const [g,o] of Object.entries(db.orders||{})){
+        if(monthKey(o.fechaGuia)!==month||serverIds.has(g)||pending.has(g))continue;
+        if(Object.prototype.hasOwnProperty.call(cloudFP.orders,g)){delete db.orders[g];delete cloudFP.orders[g]}
+      }
+    }
+    knownOrderMonths.add(month);loadedOrderMonths.add(month);saveLoadedMonthsState();
+    // El seed ya representa el estado del servidor hasta su inicio. Evita que la
+    // escucha delta vuelva a descargar miles de cambios históricos recientes.
+    writeOrdersWatermark(Math.max(maxSeen,seedStartedAt));
+    localCache();finishOrdersServerReady();renderAll();
+    return true;
+  })().finally(()=>monthLoadPromises.delete(month));
+  monthLoadPromises.set(month,task);return task;
+}
+async function ensureOrdersMonthLoaded(month){
+  if(!month||loadedOrderMonths.has(month)||db.snapshots?.[month])return true;
+  try{return await loadOrdersMonthOnce(month)}catch(err){
+    console.error('Month load',month,err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error');return false;
+  }
+}
+
 function readOrdersWatermark(){
   if(ordersWatermark>0)return ordersWatermark;
   try{const n=Number(localStorage.getItem(SYNC_WATERMARK_KEY)||0);if(Number.isFinite(n)&&n>0)ordersWatermark=n}catch(e){}
@@ -1504,6 +1587,7 @@ function startDeltaOrdersListener(){
         }else{
           const prev=next[key];
           if(!prev||stableJSON(prev)!==stableJSON(d)){next[key]=d;changed=true}
+          const mk=monthKey(d.fechaGuia);if(mk)knownOrderMonths.add(mk);
           cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
         }
       }
@@ -1524,40 +1608,17 @@ function startDeltaOrdersListener(){
     toast('Firebase no pudo sincronizar cambios: '+firebaseErrorText(err));
   });
 }
-function startFullOrdersSeed({legacyOrders=false}={}){
-  stopOrdersListener();ordersListenerMode='full-seed';
-  const ref=legacyOrders?fsDB.collection(FB.orders):fsDB.collection(FB.orders).where('_active','==',true);
-  ordersUnsub=ref.onSnapshot({includeMetadataChanges:true},snap=>{
-    try{
-      lastOrderListenerAt=Date.now();
-      if(snap.metadata.fromCache&&!ordersServerSnapshotSeen){
-        setCloudStatus('Firebase: validando base...');
-        return;
-      }
-      if(snap.metadata.fromCache)return;
-      cloudApplying=true;
-      const official={};let maxSeen=0;
-      snap.forEach(doc=>{
-        const raw=doc.data()||{},d=stripWriteGuard(raw);
-        const key=String(d.guia||decodeURIComponent(doc.id));
-        if(d._deleted===true||d._active===false){delete cloudFP.orders[key];return}
-        official[key]=d;cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
-        const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n;
-      });
-      db.orders=official;cloudApplying=false;
-      if(maxSeen<=0)maxSeen=Date.now();
-      writeOrdersWatermark(maxSeen);
-      localCache();finishOrdersServerReady();renderAll();
-      // Después de establecer una base oficial, dejamos de escuchar los 10k completos.
-      setTimeout(()=>startDeltaOrdersListener(),0);
-    }catch(err){
-      cloudApplying=false;console.error('Orders seed snapshot',err);setCloudStatus('Firebase: error de pantalla','error');
-    }
-  },err=>{
-    cloudApplying=false;console.error('Orders seed listener',err);firebaseServerLive=false;
+async function startFullOrdersSeed({legacyOrders=false}={}){
+  stopOrdersListener();ordersListenerMode='month-seed';
+  const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
+  try{
+    await loadOrdersMonthOnce(month,{force:true});
+    setTimeout(()=>startDeltaOrdersListener(),0);
+  }catch(err){
+    console.error('Orders month seed',err);firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('local');renderAll();
-    toast('Firebase no pudo leer pedidos: '+firebaseErrorText(err));
-  });
+    toast('Firebase no pudo leer '+monthName(month)+': '+firebaseErrorText(err));
+  }
 }
 function setupCloudListeners({legacyOrders=false}={}){
   if(listenersStarted||!fsDB)return;listenersStarted=true;
@@ -1639,9 +1700,10 @@ async function initFirebase(){
       setCloudStatus('Firebase: '+firebaseErrorText(e),'error');
     }
 
-    // v41: compatibiliza una sola vez los pedidos antiguos y luego escucha únicamente activos.
+    // v78: valida esquema sin barridos completos y descubre meses con consultas mínimas.
     const schemaResult=await ensureActiveOrderSchema();
     const legacyOrders=!!schemaResult?.error;
+    try{await discoverRecentOrderMonths();renderAll()}catch(e){console.warn('Month discovery',e)}
 
     // Los listeners se mantienen incluso si el primer probe falla: cuando la red vuelva,
     // Firestore reanudará el stream y la interfaz se pondrá al día automáticamente.
@@ -2179,9 +2241,11 @@ function socioDataForGuide(o){
 }
 
 function openMonths(){
-  return [...new Set(
-    Object.values(db.orders||{}).map(o=>monthKey(o.fechaGuia)).filter(Boolean)
-  )].sort().reverse();
+  const closed=new Set(Object.keys(db.snapshots||{}));
+  return [...new Set([
+    ...knownOrderMonths,
+    ...Object.values(db.orders||{}).map(o=>monthKey(o.fechaGuia)).filter(Boolean)
+  ])].filter(m=>!closed.has(m)).sort().reverse();
 }
 
 function dashboardMonths(){
@@ -2658,11 +2722,11 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){ensureClaimFilterOptions();ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){await ensureOrdersMonthLoaded($('pMonth')?.value);ensureClaimFilterOptions();ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');const m=$('dMonth')?.value;if(m&&!db.snapshots[m])await ensureOrdersMonthLoaded(m);setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
-$('pMonth').addEventListener('change',()=>{ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)});
+$('pMonth').addEventListener('change',async()=>{await ensureOrdersMonthLoaded($('pMonth').value);ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)});
 ['pDate','pProvince','pChannel','pStatus','pClaim'].forEach(id=>$(id).addEventListener('change',()=>renderOrders(true)));
 $('pServiStatus').addEventListener('input',debounceOrdersRender);
 $('bulkClaimToggle').addEventListener('click',()=>setBulkClaimMode(!bulkClaimMode));
@@ -2844,7 +2908,8 @@ async function processFile(inputId,type,resultId){
 }
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
 // INFOBIP
-['iMonth','iDate','iOwner','iChannel'].forEach(id=>$(id).addEventListener('change',renderInfo));
+$('iMonth').addEventListener('change',async()=>{await ensureOrdersMonthLoaded($('iMonth').value);renderInfo()});
+['iDate','iOwner','iChannel'].forEach(id=>$(id).addEventListener('change',renderInfo));
 function selectedInfoRows(section){const ids=[...document.querySelectorAll(`.info-check[data-section="${section}"]:checked`)].map(x=>x.dataset.guia),type=section==='agency'?'Retiro agencia':'General 48–72h';return infoRows().filter(o=>o._msg.type===type&&ids.includes(o.guia))}
 function readyInfoChecks(section){return[...document.querySelectorAll(`.info-check[data-section="${section}"]:not(:disabled)`)]}
 function toggleInfoSection(section,btn){const checks=readyInfoChecks(section),all=checks.length&&checks.every(x=>x.checked);checks.forEach(x=>x.checked=!all);btn.textContent=all?'☑ Todos':'☐ Ninguno'}
@@ -2858,7 +2923,7 @@ $('copyGeneral').addEventListener('click',()=>copyInfoSection('general'));
 $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOBIP_INGRESANDO_AGENCIA.xlsx'));
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
-$('dMonth').addEventListener('change',renderDashboard);$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
+$('dMonth').addEventListener('change',async()=>{const m=$('dMonth').value;if(m&&!db.snapshots[m])await ensureOrdersMonthLoaded(m);renderDashboard()});$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];knownOrderMonths.delete(m);loadedOrderMonths.delete(m);saveLoadedMonthsState();saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
 // Laboratorio de sincronización de bases · v48 · lote de 100
 const SYNC_TEST_KEY='servientrega_sync_test_v44';
 const SYNC_TEST_COUNT=100;
@@ -3110,7 +3175,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v77';
+      const bs=$('buildStatus');if(bs)bs.textContent='v78';
     }
   }catch(e){
     console.warn('Build check',e);
