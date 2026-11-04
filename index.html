@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v80</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v82</span></div>
 </aside>
 
 <main class="main">
@@ -632,10 +632,11 @@ const CACHE_DB_NAME='servientrega_oriflame_cache_v53';
 const CACHE_STORE='kv';
 const SYNC_WATERMARK_KEY='servientrega_orders_watermark_v53';
 const DELTA_SAFETY_MS=5*60*1000;
-const LOADED_MONTHS_KEY='servientrega_loaded_months_v80';
+const LOADED_MONTHS_KEY='servientrega_loaded_months_v81';
 const RECONCILE_BUILD_KEY='servientrega_reconcile_build_v79';
 const RECONCILE_SCHEMA_KEY='servientrega_reconcile_schema';
 const RECONCILE_SCHEMA_VALUE='month-authority-v1';
+const MONTH_COUNT_VALIDATION='v82-count-first';
 const MONTH_DISCOVERY_SPAN=8;
 const ROW_BATCH_SIZE=120;
 const SAFETY_BACKUP_KEY='servientrega_oriflame_safety_backup_v34';
@@ -659,7 +660,7 @@ let bulkClaimMode=false,bulkClaimSelected=new Set(),provinceMapToken=0,ecuadorGe
 let ordersVisibleLimit=ROW_BATCH_SIZE,lastOrdersFilterSignature='',ordersFilterTimer=null,ordersLastTotal=0;
 let cacheDBPromise=null,cacheSaveTimer=null,cacheHydrated=false,memorySafetyBackup=null;
 let ordersUnsub=null,ordersListenerMode='',ordersWatermark=0;
-let knownOrderMonths=new Set(),loadedOrderMonths=new Set(),monthLoadPromises=new Map();
+let knownOrderMonths=new Set(),loadedOrderMonths=new Set(),validatedOrderMonths=new Set(),monthLoadPromises=new Map();
 const $=id=>document.getElementById(id);
 
 const FIREBASE_CONFIG={
@@ -670,7 +671,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v80.20261104.1';
+const APP_BUILD='v82.20261104.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -809,7 +810,7 @@ function scheduleOrdersLocalFallback(){
     if(ordersServerSnapshotSeen)return;
     // Mientras existe una conciliación mensual en curso NO mostramos la caché como
     // si fuera autoridad. Un mes grande puede tardar más de 9 segundos en validarse.
-    if(ordersListenerMode==='month-seed'||monthLoadPromises.size){
+    if(ordersListenerMode==='month-check'||ordersListenerMode==='month-seed'||monthLoadPromises.size){
       const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
       setOrdersSourceState('validating',`Validando ${monthName(month)} con Firebase…`);
       return;
@@ -1036,7 +1037,8 @@ async function refreshOrdersFromServer(){
   if(!firebaseReady)return;
   const month=$('pMonth')?.value||$('iMonth')?.value||openMonths()[0]||calendarMonth(0);
   try{
-    await loadOrdersMonthOnce(month,{force:true});
+    await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false});
+    validatedOrderMonths.add(month);
     setCloudStatus('Firebase: EN VIVO · '+liveTime());
   }catch(err){console.error('Refresh orders server',err)}
 }
@@ -1499,7 +1501,7 @@ function loadLoadedMonthsState(){
     }
   }catch(e){}
   for(const m of cached)knownOrderMonths.add(m);
-  // v80: nunca asumir que una caché heredada está completa solo por tener watermark.
+  // v81: validar primero el total del mes en servidor; solo conciliar completo si difiere.
   // Cada navegador debe reconciliar al menos una vez el mes de trabajo contra Firebase.
 }
 function saveLoadedMonthsState(){
@@ -1514,6 +1516,57 @@ function monthBounds(month){
 function calendarMonth(offset=0){
   const d=new Date();d.setDate(1);d.setMonth(d.getMonth()+offset);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+let aggregateModulesPromise=null,aggregateFirestore=null;
+async function getAggregateModules(){
+  if(!aggregateModulesPromise){
+    aggregateModulesPromise=Promise.all([
+      import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js')
+    ]);
+  }
+  return aggregateModulesPromise;
+}
+async function aggregateMonthCount(month){
+  const b=monthBounds(month);if(!b)throw new Error('Mes no válido');
+  const [appMod,fireMod]=await getAggregateModules();
+  let app=appMod.getApps().find(a=>a.name==='servientrega-count');
+  if(!app)app=appMod.initializeApp(FIREBASE_CONFIG,'servientrega-count');
+  if(!aggregateFirestore)aggregateFirestore=fireMod.getFirestore(app);
+  const base=fireMod.collection(aggregateFirestore,FB.orders);
+  let q=fireMod.query(base,
+    fireMod.where('fechaGuia','>=',b.start),
+    fireMod.where('fechaGuia','<',b.end),
+    fireMod.where('_active','==',true)
+  );
+  try{
+    const snap=await firebaseTimeout(fireMod.getCountFromServer(q),15000,`Conteo ${monthName(month)}`);
+    return Number(snap.data().count||0);
+  }catch(err){
+    // Compatibilidad con proyectos donde aún no exista índice combinado _active + fechaGuia.
+    console.warn('Conteo activo no disponible; probando por fecha',err?.code||err);
+    q=fireMod.query(base,
+      fireMod.where('fechaGuia','>=',b.start),
+      fireMod.where('fechaGuia','<',b.end)
+    );
+    const snap=await firebaseTimeout(fireMod.getCountFromServer(q),15000,`Conteo ${monthName(month)}`);
+    return Number(snap.data().count||0);
+  }
+}
+function localMonthCount(month){
+  let n=0;
+  for(const o of Object.values(db.orders||{})){
+    if(monthKey(o.fechaGuia)!==month)continue;
+    if(o?._deleted===true||o?._active===false)continue;
+    n++;
+  }
+  return n;
+}
+async function validateMonthCheap(month){
+  const local=localMonthCount(month);
+  const server=await aggregateMonthCount(month);
+  return {local,server,match:local===server};
 }
 async function discoverRecentOrderMonths(){
   if(!firebaseReady||!fsDB)return;
@@ -1531,7 +1584,7 @@ async function discoverRecentOrderMonths(){
   await Promise.all(probes);
   for(const m of cachedOrderMonths())knownOrderMonths.add(m);
 }
-async function loadOrdersMonthOnce(month,{force=false}={}){
+async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}){
   month=String(month||'');if(!firebaseReady||!fsDB||!month)return false;
   if(db.snapshots?.[month])return true;
   if(!force&&loadedOrderMonths.has(month))return true;
@@ -1560,19 +1613,39 @@ async function loadOrdersMonthOnce(month,{force=false}={}){
         if(Object.prototype.hasOwnProperty.call(cloudFP.orders,g)){delete db.orders[g];delete cloudFP.orders[g]}
       }
     }
-    knownOrderMonths.add(month);loadedOrderMonths.add(month);saveLoadedMonthsState();
-    // El seed ya representa el estado del servidor hasta su inicio. Evita que la
-    // escucha delta vuelva a descargar miles de cambios históricos recientes.
-    writeOrdersWatermark(Math.max(maxSeen,seedStartedAt));
+    knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);saveLoadedMonthsState();
+    // Solo el seed inicial puede adelantar el watermark global. Cargar/validar
+    // otro mes mientras el listener delta está vivo NO debe saltarse cambios
+    // recibidos en paralelo de otros meses.
+    if(advanceWatermark)writeOrdersWatermark(Math.max(maxSeen,seedStartedAt));
     localCache();finishOrdersServerReady();renderAll();
     return true;
   })().finally(()=>monthLoadPromises.delete(month));
   monthLoadPromises.set(month,task);return task;
 }
 async function ensureOrdersMonthLoaded(month){
-  if(!month||loadedOrderMonths.has(month)||db.snapshots?.[month])return true;
-  try{return await loadOrdersMonthOnce(month)}catch(err){
-    console.error('Month load',month,err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error');return false;
+  month=String(month||'');
+  if(!month||db.snapshots?.[month])return true;
+  if(validatedOrderMonths.has(month))return true;
+  if(!firebaseReady||!fsDB)return loadedOrderMonths.has(month);
+  try{
+    const check=await validateMonthCheap(month);
+    const hasReliableDelta=readOrdersWatermark()>0;
+    if(check.match&&hasReliableDelta){
+      knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);saveLoadedMonthsState();
+      setCloudStatus(`Firebase: ${monthName(month)} validado · ${check.server} pedidos · ${liveTime()}`);
+      return true;
+    }
+    // Solo esta PC y solo este mes se descargan completos cuando el conteo difiere
+    // o cuando no existe un watermark confiable para continuar por delta.
+    setOrdersSourceState('validating',`Conciliando ${monthName(month)} · ${check.local}/${check.server} pedidos…`);
+    const ok=await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false});
+    if(ok)validatedOrderMonths.add(month);
+    return !!ok;
+  }catch(err){
+    console.error('Month validation/load',month,err);
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    return false;
   }
 }
 
@@ -1643,28 +1716,50 @@ function startDeltaOrdersListener(){
   });
 }
 async function startFullOrdersSeed({legacyOrders=false}={}){
-  stopOrdersListener();ordersListenerMode='month-seed';
+  stopOrdersListener();ordersListenerMode='month-check';
   const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
   setOrdersSourceState('validating',`Validando ${monthName(month)} con Firebase…`);
   try{
-    await loadOrdersMonthOnce(month,{force:true});
+    const check=await validateMonthCheap(month);
+    const hasReliableDelta=meaningfulLocal(db)&&readOrdersWatermark()>0&&!legacyOrders;
+    if(check.match&&hasReliableDelta){
+      knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);saveLoadedMonthsState();
+      markReconciled();
+      ordersServerSnapshotSeen=true;ordersInitialSnapshot=true;clearTimeout(ordersFallbackTimer);
+      setOrdersSourceState('server');firebaseServerLive=true;
+      setCloudStatus(`Firebase: ${monthName(month)} validado · ${check.server} pedidos · ${liveTime()}`);
+      renderAll();
+      setTimeout(()=>startDeltaOrdersListener(),0);
+      return;
+    }
+    // ÚNICAMENTE la PC que no coincide (o no tiene watermark fiable) descarga
+    // el mes completo. Las PCs ya cuadradas no vuelven a leer miles de pedidos.
+    ordersListenerMode='month-seed';
+    setOrdersSourceState('validating',`Conciliando ${monthName(month)} · ${check.local}/${check.server} pedidos…`);
+    await loadOrdersMonthOnce(month,{force:true,advanceWatermark:true});
+    validatedOrderMonths.add(month);
     markReconciled();
     setTimeout(()=>startDeltaOrdersListener(),0);
   }catch(err){
-    console.error('Orders month seed',err);firebaseServerLive=false;
+    console.error('Orders month validation',err);firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('local');renderAll();
-    toast('Firebase no pudo leer '+monthName(month)+': '+firebaseErrorText(err));
+    toast('Firebase no pudo validar '+monthName(month)+': '+firebaseErrorText(err));
   }
 }
 async function reconcileCurrentMonthForBuild(){
   if(!firebaseReady||!fsDB)return false;
-  if(hasReconcileProof())return true;
   const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
   if(!month)return false;
   try{
-    await loadOrdersMonthOnce(month,{force:true});
-    loadedOrderMonths.add(month);saveLoadedMonthsState();
-    markReconciled();
+    const check=await validateMonthCheap(month);
+    if(check.match&&readOrdersWatermark()>0){
+      knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);saveLoadedMonthsState();
+      markReconciled();
+      setCloudStatus(`Firebase: ${monthName(month)} validado · ${check.server} pedidos · ${liveTime()}`);
+      return true;
+    }
+    await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false});
+    validatedOrderMonths.add(month);markReconciled();
     setCloudStatus(`Firebase: ${monthName(month)} conciliado · ${liveTime()}`);
     return true;
   }catch(err){
@@ -1685,11 +1780,10 @@ function setupCloudListeners({legacyOrders=false}={}){
     if(activePageId()==='config')renderConfig();else if(activePageId()==='pedidos')renderOwnerTabs();
   },err=>{console.error('Config listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
 
-  // v80: solo entrar directo a delta cuando esta versión ya reconcilió el mes
-  // contra Firebase. Una caché heredada nunca se considera autoridad por sí sola.
-  const reconciled=hasReconcileProof();
-  const canDelta=reconciled&&meaningfulLocal(db)&&readOrdersWatermark()>0&&!legacyOrders;
-  if(canDelta)startDeltaOrdersListener();else startFullOrdersSeed({legacyOrders});
+  // v82: cada apertura valida primero SOLO EL CONTEO del mes. Nunca confiamos
+  // únicamente en una marca local heredada. Si el total coincide, entra a delta
+  // sin descargar el mes; si difiere, solo esa PC hace conciliación completa.
+  startFullOrdersSeed({legacyOrders});
 
   if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){}
   syncSignalUnsub=fsDB.collection(FB.sync).doc('state').onSnapshot({includeMetadataChanges:true},doc=>{
@@ -1755,7 +1849,7 @@ async function initFirebase(){
       setCloudStatus('Firebase: '+firebaseErrorText(e),'error');
     }
 
-    // v80: valida esquema sin barridos completos, descubre meses y reconcilia el mes activo una sola vez por navegador.
+    // v82: valida el conteo mensual primero; solo la PC desfasada descarga el mes completo.
     const schemaResult=await ensureActiveOrderSchema();
     const legacyOrders=!!schemaResult?.error;
     try{await discoverRecentOrderMonths();renderAll()}catch(e){console.warn('Month discovery',e)}
@@ -3230,7 +3324,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v80';
+      const bs=$('buildStatus');if(bs)bs.textContent='v82';
     }
   }catch(e){
     console.warn('Build check',e);
