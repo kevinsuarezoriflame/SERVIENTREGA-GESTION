@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v78</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v79</span></div>
 </aside>
 
 <main class="main">
@@ -632,7 +632,8 @@ const CACHE_DB_NAME='servientrega_oriflame_cache_v53';
 const CACHE_STORE='kv';
 const SYNC_WATERMARK_KEY='servientrega_orders_watermark_v53';
 const DELTA_SAFETY_MS=5*60*1000;
-const LOADED_MONTHS_KEY='servientrega_loaded_months_v78';
+const LOADED_MONTHS_KEY='servientrega_loaded_months_v79';
+const RECONCILE_BUILD_KEY='servientrega_reconcile_build_v79';
 const MONTH_DISCOVERY_SPAN=8;
 const ROW_BATCH_SIZE=120;
 const SAFETY_BACKUP_KEY='servientrega_oriflame_safety_backup_v34';
@@ -667,7 +668,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v78.20261104.1';
+const APP_BUILD='v79.20261104.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1461,12 +1462,8 @@ function loadLoadedMonthsState(){
     }
   }catch(e){}
   for(const m of cached)knownOrderMonths.add(m);
-  // Migración segura desde v77: si existe watermark, esa caché se originó de una
-  // base oficial completa + listener delta. La damos por completa una sola vez.
-  if(!loadedOrderMonths.size&&meaningfulLocal(db)&&readOrdersWatermark()>0){
-    for(const m of cached)loadedOrderMonths.add(m);
-    saveLoadedMonthsState();
-  }
+  // v79: nunca asumir que una caché heredada está completa solo por tener watermark.
+  // Cada navegador debe reconciliar al menos una vez el mes de trabajo contra Firebase.
 }
 function saveLoadedMonthsState(){
   try{localStorage.setItem(LOADED_MONTHS_KEY,JSON.stringify([...loadedOrderMonths].sort()))}catch(e){}
@@ -1613,6 +1610,7 @@ async function startFullOrdersSeed({legacyOrders=false}={}){
   const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
   try{
     await loadOrdersMonthOnce(month,{force:true});
+    try{localStorage.setItem(RECONCILE_BUILD_KEY,APP_BUILD)}catch(e){}
     setTimeout(()=>startDeltaOrdersListener(),0);
   }catch(err){
     console.error('Orders month seed',err);firebaseServerLive=false;
@@ -1620,6 +1618,26 @@ async function startFullOrdersSeed({legacyOrders=false}={}){
     toast('Firebase no pudo leer '+monthName(month)+': '+firebaseErrorText(err));
   }
 }
+async function reconcileCurrentMonthForBuild(){
+  if(!firebaseReady||!fsDB)return false;
+  let done='';
+  try{done=localStorage.getItem(RECONCILE_BUILD_KEY)||''}catch(e){}
+  if(done===APP_BUILD)return true;
+  const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
+  if(!month)return false;
+  try{
+    await loadOrdersMonthOnce(month,{force:true});
+    loadedOrderMonths.add(month);saveLoadedMonthsState();
+    try{localStorage.setItem(RECONCILE_BUILD_KEY,APP_BUILD)}catch(e){}
+    setCloudStatus(`Firebase: ${monthName(month)} conciliado · ${liveTime()}`);
+    return true;
+  }catch(err){
+    console.error('Reconcile current month',err);
+    setCloudStatus('Firebase: no se pudo conciliar '+monthName(month),'error');
+    return false;
+  }
+}
+
 function setupCloudListeners({legacyOrders=false}={}){
   if(listenersStarted||!fsDB)return;listenersStarted=true;
 
@@ -1631,9 +1649,11 @@ function setupCloudListeners({legacyOrders=false}={}){
     if(activePageId()==='config')renderConfig();else if(activePageId()==='pedidos')renderOwnerTabs();
   },err=>{console.error('Config listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
 
-  // v53: si esta PC ya tiene una base oficial en IndexedDB, solo pide cambios posteriores.
-  // Una PC nueva o con caché borrada hace una carga completa UNA sola vez y luego pasa a delta.
-  const canDelta=meaningfulLocal(db)&&readOrdersWatermark()>0&&!legacyOrders;
+  // v79: solo entrar directo a delta cuando esta versión ya reconcilió el mes
+  // contra Firebase. Una caché heredada nunca se considera autoridad por sí sola.
+  let reconciled=false;
+  try{reconciled=localStorage.getItem(RECONCILE_BUILD_KEY)===APP_BUILD}catch(e){}
+  const canDelta=reconciled&&meaningfulLocal(db)&&readOrdersWatermark()>0&&!legacyOrders;
   if(canDelta)startDeltaOrdersListener();else startFullOrdersSeed({legacyOrders});
 
   if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){}
@@ -1700,7 +1720,7 @@ async function initFirebase(){
       setCloudStatus('Firebase: '+firebaseErrorText(e),'error');
     }
 
-    // v78: valida esquema sin barridos completos y descubre meses con consultas mínimas.
+    // v79: valida esquema sin barridos completos, descubre meses y reconcilia el mes activo una sola vez por navegador.
     const schemaResult=await ensureActiveOrderSchema();
     const legacyOrders=!!schemaResult?.error;
     try{await discoverRecentOrderMonths();renderAll()}catch(e){console.warn('Month discovery',e)}
@@ -3175,7 +3195,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v78';
+      const bs=$('buildStatus');if(bs)bs.textContent='v79';
     }
   }catch(e){
     console.warn('Build check',e);
