@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v88</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v89</span></div>
 </aside>
 
 <main class="main">
@@ -660,6 +660,15 @@ const LOCALIDAD_PROV={
 };
 function freshDB(){return{version:27,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}},syncPending:{servi:{orders:[],sources:[],at:0}}}}
 function normalizeDB(x){x=x||freshDB();x.version=27;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};x.syncPending=x.syncPending||{};x.syncPending.servi=x.syncPending.servi||{orders:[],sources:[],at:0};x.syncPending.servi.orders=Array.isArray(x.syncPending.servi.orders)?x.syncPending.servi.orders:[];x.syncPending.servi.sources=Array.isArray(x.syncPending.servi.sources)?x.syncPending.servi.sources:[];return x}
+
+// v89: un resumen/snapshot antiguo NO cierra un mes por sí solo.
+// Solo un cierre manual realizado desde v89+ lleva esta marca explícita.
+function snapshotIsExplicitClose(v){
+  return !!(v && (v.closedExplicit===true || v.manualClose===true || v.closureSource==='manual'));
+}
+function isMonthExplicitlyClosed(month){
+  return snapshotIsExplicitClose(db.snapshots?.[String(month||'')]);
+}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
 let db=loadDB(),activeOwner='TODOS',dateSort='desc',daysSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
 let bulkClaimMode=false,bulkClaimSelected=new Set(),provinceMapToken=0,ecuadorGeoJSONPromise=null,provinceListMode='top10',provinceHighchart=null;
@@ -679,7 +688,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v88.20261105.1';
+const APP_BUILD='v89.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -884,7 +893,7 @@ function unionCloudWithLocal(cloud,local){
   if(!Array.isArray(merged.claims)||!merged.claims.length)merged.claims=local.claims;
   if(!merged.settings||!Object.keys(merged.settings).length)merged.settings=local.settings;
 
-  const closedMonths=new Set(Object.keys(merged.snapshots||{}));
+  const closedMonths=new Set(Object.entries(merged.snapshots||{}).filter(([,v])=>snapshotIsExplicitClose(v)).map(([k])=>k));
   const recoveredOrders=[];
   for(const [guia,o] of Object.entries(local.orders||{})){
     if(merged.orders[guia])continue; // Existing Firebase document always wins.
@@ -908,7 +917,10 @@ function unionCloudWithLocal(cloud,local){
     if(!merged.sources.guidePhones[k]){merged.sources.guidePhones[k]=JSON.parse(JSON.stringify(v));recoveredGuidePhones.push(k)}
   }
   for(const [k,v] of Object.entries(local.snapshots||{})){
-    if(!merged.snapshots[k]){merged.snapshots[k]=JSON.parse(JSON.stringify(v));recoveredSnapshots.push(k)}
+    if(!merged.snapshots[k]){
+      merged.snapshots[k]=JSON.parse(JSON.stringify(v));
+      if(snapshotIsExplicitClose(v))recoveredSnapshots.push(k);
+    }
   }
 
   return{
@@ -1737,7 +1749,7 @@ async function discoverRecentOrderMonths(){
 }
 async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}){
   month=String(month||'');if(!firebaseReady||!fsDB||!month)return false;
-  if(db.snapshots?.[month])return true;
+  if(isMonthExplicitlyClosed(month))return true;
   if(!force&&loadedOrderMonths.has(month))return true;
   if(monthLoadPromises.has(month))return monthLoadPromises.get(month);
   const task=(async()=>{
@@ -1776,7 +1788,7 @@ async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}
 }
 async function ensureOrdersMonthLoaded(month){
   month=String(month||'');
-  if(!month||db.snapshots?.[month])return true;
+  if(!month||isMonthExplicitlyClosed(month))return true;
   if(!firebaseReady||!fsDB){setOrdersSourceState('error','Sin conexión a Firebase');return false;}
 
   const localCount=localMonthCount(month);
@@ -2476,7 +2488,7 @@ function socioDataForGuide(o){
 }
 
 function openMonths(){
-  const closed=new Set(Object.keys(db.snapshots||{}));
+  const closed=new Set(Object.entries(db.snapshots||{}).filter(([,v])=>snapshotIsExplicitClose(v)).map(([k])=>k));
   return [...new Set([
     ...knownOrderMonths,
     ...Object.values(db.orders||{}).map(o=>monthKey(o.fechaGuia)).filter(Boolean)
@@ -2484,9 +2496,10 @@ function openMonths(){
 }
 
 function dashboardMonths(){
+  const explicitClosed=Object.entries(db.snapshots||{}).filter(([,v])=>snapshotIsExplicitClose(v)).map(([k])=>k);
   return [...new Set([
     ...openMonths(),
-    ...Object.keys(db.snapshots||{})
+    ...explicitClosed
   ])].sort().reverse();
 }
 
@@ -2506,7 +2519,7 @@ function ensureMonthSelects(){
     :'<option value="">Sin datos</option>';
 
   d.innerHTML=dash.length
-    ?dash.map(m=>`<option value="${m}">${monthName(m)}${db.snapshots[m]?' · CERRADO':''}</option>`).join('')
+    ?dash.map(m=>`<option value="${m}">${monthName(m)}${isMonthExplicitlyClosed(m)?' · CERRADO':''}</option>`).join('')
     :'<option value="">Sin datos</option>';
 
   if(open.includes(pOld))p.value=pOld;
@@ -2670,7 +2683,7 @@ function infoRows(){const m=$('iMonth').value,d=$('iDate').value,own=$('iOwner')
 function infoTableHtml(rows,section){return `<thead><tr><th>✓</th><th>GUIA</th><th>FECHA GUIA</th><th>SOCIO</th><th>CANAL</th><th>RESPONSABLE</th><th>STATUS</th><th>CELULAR</th><th>LÍNEA INFOBIP</th></tr></thead><tbody>${rows.map(o=>`<tr><td><input type="checkbox" class="info-check" data-section="${section}" data-guia="${o.guia}" ${o._msg.ready?'':'disabled'}></td><td>${escapeHtml(o.guia)}</td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.socio||'')}</td><td>${escapeHtml(o.canal)}</td><td>${escapeHtml(o.responsable||'')}</td><td><span class="badge ${statusBadge(o)}">${escapeHtml(o.status||'Pendiente')}</span></td><td>${escapeHtml(o.celular||'')}</td><td>${escapeHtml(o._msg.line||'')}</td></tr>`).join('')}</tbody>`}
 function renderInfo(){const rows=infoRows(),agency=rows.filter(o=>o._msg.type==='Retiro agencia'),general=rows.filter(o=>o._msg.type!=='Retiro agencia');$('iPending').textContent=rows.length;$('iReady').textContent=rows.filter(o=>o._msg.ready).length;$('iPickup').textContent=agency.filter(o=>o._msg.ready).length;$('iGeneral').textContent=general.filter(o=>o._msg.ready).length;$('iMissing').textContent=rows.filter(o=>!o._msg.ready).length;$('infoAgencyTable').innerHTML=agency.length?infoTableHtml(agency,'agency'):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>';$('infoGeneralTable').innerHTML=general.length?infoTableHtml(general,'general'):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>'}
 function computeAgg(rows){const porProvincia={},porTiempo={},porClaim={},porCanal={HD:0,PUP:0,SPO:0},porFechaGuia={};let total=rows.length,entregados=0;for(const o of rows){const fg=isoDate(o.fechaGuia);if(fg)porFechaGuia[fg]=(porFechaGuia[fg]||0)+1;const prov=canonProv(o.provincia||o.ciudad);porProvincia[prov]=(porProvincia[prov]||0)+1;const t=deliveryTime(o);if(t)porTiempo[t]=(porTiempo[t]||0)+1;if(o.clasificacion)porClaim[o.clasificacion]=(porClaim[o.clasificacion]||0)+1;if(Object.prototype.hasOwnProperty.call(porCanal,o.canal))porCanal[o.canal]++;const noPorTiempo=N(t).includes('NO ENTREGADO')||t==='No entregado';const noServi=N(o.clasificacion).includes('NOVEDAD COURIER');if(!(noPorTiempo||noServi))entregados++}const okTiempo=(porTiempo['24hrs']||0)+(porTiempo['48hrs']||0)+(porTiempo['Menos de 24hrs']||0);const noTiempo=(porTiempo['72hrs']||0)+(porTiempo['Más de 72hrs']||0)+(porTiempo['No entregado']||porTiempo['NO ENTREGADO']||0);const totTiempo=okTiempo+noTiempo;const entregadosReales=rows.filter(o=>isDelivered(o)).length;return{porProvincia,porTiempo,porClaim,porCanal,porFechaGuia,total,entregados,entregadosReales,efectividad:total?entregados*100/total:null,efectividadTiempo:totTiempo?okTiempo*100/totTiempo:null}}
-function dashboardData(){const m=$('dMonth').value;if(!m)return computeAgg([]);if(db.snapshots[m])return db.snapshots[m].agg;return computeAgg(Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m))}
+function dashboardData(){const m=$('dMonth').value;if(!m)return computeAgg([]);if(isMonthExplicitlyClosed(m))return db.snapshots[m].agg;return computeAgg(Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m))}
 
 function provinceColor(v){v=Number(v||0);if(v<=0)return'#E7ECEA';if(v<=50)return'#D2F0DF';if(v<=200)return'#9EDAB8';if(v<=500)return'#62C18A';if(v<=1000)return'#18A557';return'#08763D'}
 function normalizeMapProvince(v){const p=N(v||'');if(p.includes('SANTO DOMINGO'))return'SANTO DOMINGO';if(p==='CANAR'||p==='CAÑAR')return'CANAR';return p}
@@ -2864,7 +2877,7 @@ const DASH_PALETTE=['#00A651','#63C995','#4D8DCC','#F0B44D','#846FC7','#4FA9A3',
 function timeChartColor(label){const s=N(label);if(s.includes('NO ENTREGADO'))return'#7E8F88';if(s.includes('MENOS DE 24')||s.includes('<24'))return'#00A651';if(s.includes('24H'))return'#63C995';if(s.includes('48H'))return'#4D8DCC';if(s.includes('72H')&&!s.includes('MAS'))return'#F0B44D';if(s.includes('MAS DE 72')||s.includes('>72'))return'#C85F66';return'#6FAFA3'}
 function setChartPlaceholder(wrapId,msg){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<div class="chart-placeholder">${escapeHtml(msg||'Sin datos')}</div>`}
 function restoreChartCanvas(wrapId,canvasId,extraClass=''){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<canvas id="${canvasId}"></canvas>`;if(extraClass)wrap.className='canvas-wrap '+extraClass;else wrap.className='canvas-wrap'}
-function renderDashboard(){const m=$('dMonth').value,closed=!!db.snapshots[m];
+function renderDashboard(){const m=$('dMonth').value,closed=isMonthExplicitlyClosed(m);
   if(m&&!closed&&localMonthCount(m)===0&&!validatedOrderMonths.has(m)){
     $('sumTotal').textContent='…';$('sumDelivered').textContent='…';$('sumPending').textContent='…';$('sumEffectiveness').textContent='…';
     $('sumDeliveredPct').textContent='Cargando '+monthName(m)+'…';$('sumPendingPct').textContent='';
@@ -2893,7 +2906,7 @@ function downloadPNG(id){const c=$(id),a=document.createElement('a');a.download=
 function dailyOrdersData(){
   const m=$('dMonth').value;
   if(!m)return{month:m,counts:{}};
-  if(db.snapshots[m])return{month:m,counts:db.snapshots[m].agg?.porFechaGuia||{}};
+  if(isMonthExplicitlyClosed(m))return{month:m,counts:db.snapshots[m].agg?.porFechaGuia||{}};
   const counts={};
   for(const o of Object.values(db.orders)){
     if(monthKey(o.fechaGuia)!==m)continue;
@@ -2965,7 +2978,7 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){await ensureOrdersMonthLoaded($('pMonth')?.value);ensureClaimFilterOptions();ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');const m=$('dMonth')?.value;if(m&&!db.snapshots[m])await ensureOrdersMonthLoaded(m);setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){await ensureOrdersMonthLoaded($('pMonth')?.value);ensureClaimFilterOptions();ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');const m=$('dMonth')?.value;if(m&&!isMonthExplicitlyClosed(m))await ensureOrdersMonthLoaded(m);setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
@@ -3166,7 +3179,7 @@ $('copyGeneral').addEventListener('click',()=>copyInfoSection('general'));
 $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOBIP_INGRESANDO_AGENCIA.xlsx'));
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
-$('dMonth').addEventListener('change',async()=>{const m=$('dMonth').value;if(m&&!db.snapshots[m])await ensureOrdersMonthLoaded(m);renderDashboard()});$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||db.snapshots[m])return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];knownOrderMonths.delete(m);loadedOrderMonths.delete(m);saveLoadedMonthsState();saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
+$('dMonth').addEventListener('change',async()=>{const m=$('dMonth').value;if(m&&!isMonthExplicitlyClosed(m))await ensureOrdersMonthLoaded(m);renderDashboard()});$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||isMonthExplicitlyClosed(m))return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),closedExplicit:true,manualClose:true,closureSource:'manual',closureBuild:APP_BUILD,rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];knownOrderMonths.delete(m);loadedOrderMonths.delete(m);saveLoadedMonthsState();saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
 // Laboratorio de sincronización de bases · v48 · lote de 100
 const SYNC_TEST_KEY='servientrega_sync_test_v44';
 const SYNC_TEST_COUNT=100;
@@ -3396,12 +3409,13 @@ $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none
 
 updateBulkClaimUI();
 window.addEventListener('pagehide',()=>{try{cachePut('db',db)}catch(e){}});
+// v89: cierre explícito y recuperación de meses abiertos.
 // v88: estabilidad primero. Nunca recargar automáticamente por una versión detectada
 // en GitHub: durante el despliegue GitHub Pages puede servir temporalmente una versión
 // anterior y provocar un rebote (v88 -> v85). La versión se actualiza únicamente al
 // recargar/abrir la página por decisión del usuario.
 async function checkPublishedBuild(){
-  const bs=$('buildStatus');if(bs)bs.textContent='v88';
+  const bs=$('buildStatus');if(bs)bs.textContent='v89';
 }
 
 // v88: sin auto-reload ni polling de versión.
