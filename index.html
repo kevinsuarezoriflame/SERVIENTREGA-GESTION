@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v90</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v91</span></div>
 </aside>
 
 <main class="main">
@@ -661,13 +661,23 @@ const LOCALIDAD_PROV={
 function freshDB(){return{version:27,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}},syncPending:{servi:{orders:[],sources:[],at:0}}}}
 function normalizeDB(x){x=x||freshDB();x.version=27;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};x.syncPending=x.syncPending||{};x.syncPending.servi=x.syncPending.servi||{orders:[],sources:[],at:0};x.syncPending.servi.orders=Array.isArray(x.syncPending.servi.orders)?x.syncPending.servi.orders:[];x.syncPending.servi.sources=Array.isArray(x.syncPending.servi.sources)?x.syncPending.servi.sources:[];return x}
 
-// v90: un resumen/snapshot antiguo NO cierra un mes por sí solo.
-// Solo un cierre manual realizado desde v89+ lleva esta marca explícita.
+// v91: separar snapshots históricos legítimos de falsos cierres heredados.
+// Migración controlada: meses anteriores a Octubre 2026 pueden usar el snapshot histórico
+// guardado como cierre legítimo. Octubre 2026 y posteriores solo cierran con marca manual explícita.
+const LEGACY_HISTORICAL_CLOSE_BEFORE='2026-10';
 function snapshotIsExplicitClose(v){
   return !!(v && (v.closedExplicit===true || v.manualClose===true || v.closureSource==='manual'));
 }
+function snapshotIsLegacyHistoricalClose(month,v){
+  const m=String(month||'');
+  return !!(m && m<LEGACY_HISTORICAL_CLOSE_BEFORE && v && v.agg && Number(v.agg.total||0)>0);
+}
+function snapshotClosesMonth(month,v){
+  return snapshotIsExplicitClose(v) || snapshotIsLegacyHistoricalClose(month,v);
+}
 function isMonthExplicitlyClosed(month){
-  return snapshotIsExplicitClose(db.snapshots?.[String(month||'')]);
+  const m=String(month||'');
+  return snapshotClosesMonth(m,db.snapshots?.[m]);
 }
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY));if(x&&x.orders&&x.owners)return normalizeDB(x)}catch(e){}return freshDB()}
 let db=loadDB(),activeOwner='TODOS',dateSort='desc',daysSort='',workingGuide='',chartTiempo=null,chartClaims=null,chartDailyOrders=null;
@@ -689,7 +699,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v90.20261105.1';
+const APP_BUILD='v92.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -894,7 +904,7 @@ function unionCloudWithLocal(cloud,local){
   if(!Array.isArray(merged.claims)||!merged.claims.length)merged.claims=local.claims;
   if(!merged.settings||!Object.keys(merged.settings).length)merged.settings=local.settings;
 
-  const closedMonths=new Set(Object.entries(merged.snapshots||{}).filter(([,v])=>snapshotIsExplicitClose(v)).map(([k])=>k));
+  const closedMonths=new Set(Object.entries(merged.snapshots||{}).filter(([k,v])=>snapshotClosesMonth(k,v)).map(([k])=>k));
   const recoveredOrders=[];
   for(const [guia,o] of Object.entries(local.orders||{})){
     if(merged.orders[guia])continue; // Existing Firebase document always wins.
@@ -920,7 +930,7 @@ function unionCloudWithLocal(cloud,local){
   for(const [k,v] of Object.entries(local.snapshots||{})){
     if(!merged.snapshots[k]){
       merged.snapshots[k]=JSON.parse(JSON.stringify(v));
-      if(snapshotIsExplicitClose(v))recoveredSnapshots.push(k);
+      if(snapshotClosesMonth(k,v))recoveredSnapshots.push(k);
     }
   }
 
@@ -2530,7 +2540,7 @@ function socioDataForGuide(o){
 }
 
 function openMonths(){
-  const closed=new Set(Object.entries(db.snapshots||{}).filter(([,v])=>snapshotIsExplicitClose(v)).map(([k])=>k));
+  const closed=new Set(Object.entries(db.snapshots||{}).filter(([k,v])=>snapshotClosesMonth(k,v)).map(([k])=>k));
   return [...new Set([
     ...knownOrderMonths,
     ...Object.values(db.orders||{}).map(o=>monthKey(o.fechaGuia)).filter(Boolean)
@@ -2538,10 +2548,12 @@ function openMonths(){
 }
 
 function dashboardMonths(){
-  const explicitClosed=Object.entries(db.snapshots||{}).filter(([,v])=>snapshotIsExplicitClose(v)).map(([k])=>k);
+  const snapshotMonths=Object.entries(db.snapshots||{})
+    .filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&v&&v.agg)
+    .map(([k])=>k);
   return [...new Set([
     ...openMonths(),
-    ...explicitClosed
+    ...snapshotMonths
   ])].sort().reverse();
 }
 
@@ -2725,7 +2737,23 @@ function infoRows(){const m=$('iMonth').value,d=$('iDate').value,own=$('iOwner')
 function infoTableHtml(rows,section){return `<thead><tr><th>✓</th><th>GUIA</th><th>FECHA GUIA</th><th>SOCIO</th><th>CANAL</th><th>RESPONSABLE</th><th>STATUS</th><th>CELULAR</th><th>LÍNEA INFOBIP</th></tr></thead><tbody>${rows.map(o=>`<tr><td><input type="checkbox" class="info-check" data-section="${section}" data-guia="${o.guia}" ${o._msg.ready?'':'disabled'}></td><td>${escapeHtml(o.guia)}</td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.socio||'')}</td><td>${escapeHtml(o.canal)}</td><td>${escapeHtml(o.responsable||'')}</td><td><span class="badge ${statusBadge(o)}">${escapeHtml(o.status||'Pendiente')}</span></td><td>${escapeHtml(o.celular||'')}</td><td>${escapeHtml(o._msg.line||'')}</td></tr>`).join('')}</tbody>`}
 function renderInfo(){const rows=infoRows(),agency=rows.filter(o=>o._msg.type==='Retiro agencia'),general=rows.filter(o=>o._msg.type!=='Retiro agencia');$('iPending').textContent=rows.length;$('iReady').textContent=rows.filter(o=>o._msg.ready).length;$('iPickup').textContent=agency.filter(o=>o._msg.ready).length;$('iGeneral').textContent=general.filter(o=>o._msg.ready).length;$('iMissing').textContent=rows.filter(o=>!o._msg.ready).length;$('infoAgencyTable').innerHTML=agency.length?infoTableHtml(agency,'agency'):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>';$('infoGeneralTable').innerHTML=general.length?infoTableHtml(general,'general'):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>'}
 function computeAgg(rows){const porProvincia={},porTiempo={},porClaim={},porCanal={HD:0,PUP:0,SPO:0},porFechaGuia={};let total=rows.length,entregados=0;for(const o of rows){const fg=isoDate(o.fechaGuia);if(fg)porFechaGuia[fg]=(porFechaGuia[fg]||0)+1;const prov=canonProv(o.provincia||o.ciudad);porProvincia[prov]=(porProvincia[prov]||0)+1;const t=deliveryTime(o);if(t)porTiempo[t]=(porTiempo[t]||0)+1;if(o.clasificacion)porClaim[o.clasificacion]=(porClaim[o.clasificacion]||0)+1;if(Object.prototype.hasOwnProperty.call(porCanal,o.canal))porCanal[o.canal]++;const noPorTiempo=N(t).includes('NO ENTREGADO')||t==='No entregado';const noServi=N(o.clasificacion).includes('NOVEDAD COURIER');if(!(noPorTiempo||noServi))entregados++}const okTiempo=(porTiempo['24hrs']||0)+(porTiempo['48hrs']||0)+(porTiempo['Menos de 24hrs']||0);const noTiempo=(porTiempo['72hrs']||0)+(porTiempo['Más de 72hrs']||0)+(porTiempo['No entregado']||porTiempo['NO ENTREGADO']||0);const totTiempo=okTiempo+noTiempo;const entregadosReales=rows.filter(o=>isDelivered(o)).length;return{porProvincia,porTiempo,porClaim,porCanal,porFechaGuia,total,entregados,entregadosReales,efectividad:total?entregados*100/total:null,efectividadTiempo:totTiempo?okTiempo*100/totTiempo:null}}
-function dashboardData(){const m=$('dMonth').value;if(!m)return computeAgg([]);if(isMonthExplicitlyClosed(m))return db.snapshots[m].agg;return computeAgg(Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m))}
+function dashboardSnapshotAgg(month){
+  const m=String(month||''),snap=db.snapshots?.[m];
+  if(!m||!snap||!snap.agg)return null;
+  const total=Number(snap.agg.total);
+  if(!Number.isFinite(total)||total<0)return null;
+  // Dashboard histórico: un resumen guardado de un mes anterior es autoridad
+  // para los gráficos, aunque el mes no esté marcado como cierre manual.
+  // Esto evita descargar miles de guías solo para dibujar KPIs.
+  if(m<calendarMonth(0))return snap.agg;
+  if(snapshotClosesMonth(m,snap))return snap.agg;
+  return null;
+}
+function dashboardData(){
+  const m=$('dMonth').value;if(!m)return computeAgg([]);
+  const snapAgg=dashboardSnapshotAgg(m);if(snapAgg)return snapAgg;
+  return computeAgg(Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m));
+}
 
 function provinceColor(v){v=Number(v||0);if(v<=0)return'#E7ECEA';if(v<=50)return'#D2F0DF';if(v<=200)return'#9EDAB8';if(v<=500)return'#62C18A';if(v<=1000)return'#18A557';return'#08763D'}
 function normalizeMapProvince(v){const p=N(v||'');if(p.includes('SANTO DOMINGO'))return'SANTO DOMINGO';if(p==='CANAR'||p==='CAÑAR')return'CANAR';return p}
@@ -2919,12 +2947,14 @@ const DASH_PALETTE=['#00A651','#63C995','#4D8DCC','#F0B44D','#846FC7','#4FA9A3',
 function timeChartColor(label){const s=N(label);if(s.includes('NO ENTREGADO'))return'#7E8F88';if(s.includes('MENOS DE 24')||s.includes('<24'))return'#00A651';if(s.includes('24H'))return'#63C995';if(s.includes('48H'))return'#4D8DCC';if(s.includes('72H')&&!s.includes('MAS'))return'#F0B44D';if(s.includes('MAS DE 72')||s.includes('>72'))return'#C85F66';return'#6FAFA3'}
 function setChartPlaceholder(wrapId,msg){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<div class="chart-placeholder">${escapeHtml(msg||'Sin datos')}</div>`}
 function restoreChartCanvas(wrapId,canvasId,extraClass=''){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<canvas id="${canvasId}"></canvas>`;if(extraClass)wrap.className='canvas-wrap '+extraClass;else wrap.className='canvas-wrap'}
-function renderDashboard(){const m=$('dMonth').value,closed=isMonthExplicitlyClosed(m);
-  if(m&&!closed&&localMonthCount(m)===0&&!validatedOrderMonths.has(m)){
+function renderDashboard(){const m=$('dMonth').value,closed=isMonthExplicitlyClosed(m),snapAgg=dashboardSnapshotAgg(m);
+  if(m&&!closed&&!snapAgg&&localMonthCount(m)===0&&!validatedOrderMonths.has(m)){
     $('sumTotal').textContent='…';$('sumDelivered').textContent='…';$('sumPending').textContent='…';$('sumEffectiveness').textContent='…';
     $('sumDeliveredPct').textContent='Cargando '+monthName(m)+'…';$('sumPendingPct').textContent='';
     $('kpiHD').textContent='…';$('kpiPUP').textContent='…';$('kpiSPO').textContent='…';
-    if(firebaseReady&&!monthLoadPromises.has(m)){loadOrdersMonthOnce(m,{force:true,advanceWatermark:false,includeInactiveFull:true}).then(()=>{ensureMonthSelects();if([...$('dMonth').options].some(o=>o.value===m))$('dMonth').value=m;renderDashboard()}).catch(err=>console.warn('Dashboard month load',err));}
+    // v92: Dashboard NUNCA descarga el mes completo. El detalle se carga solo en Pedidos.
+    // Para meses históricos se usa snapshot; para el mes actual se usa la copia viva ya sincronizada.
+    $('sumDeliveredPct').textContent='Sin resumen disponible aún';
     return;
   }
 $('monthStatus').textContent=closed?'MES CERRADO':'MES ABIERTO';$('closeMonth').disabled=!m||closed;const agg=dashboardData();const inferredPending=(agg.porTiempo?.['No entregado']||agg.porTiempo?.['NO ENTREGADO']||0),realDelivered=agg.entregadosReales??Math.max(0,(agg.total||0)-inferredPending),pending=Math.max(0,(agg.total||0)-realDelivered),dp=agg.total?realDelivered*100/agg.total:0,pp=agg.total?pending*100/agg.total:0;$('sumTotal').textContent=agg.total||0;$('sumDelivered').textContent=realDelivered;$('sumPending').textContent=pending;$('sumDeliveredPct').textContent=`${dp.toFixed(1)}% del total`;$('sumPendingPct').textContent=`${pp.toFixed(1)}% del total`;$('sumEffectiveness').textContent=agg.total?`${dp.toFixed(1)}%`:'0%';$('kpiHD').textContent=agg.porCanal.HD||0;$('kpiPUP').textContent=agg.porCanal.PUP||0;$('kpiSPO').textContent=agg.porCanal.SPO||0;renderProvincePanel(agg);const arrT=Object.keys(agg.porTiempo).map(k=>({k,v:agg.porTiempo[k],p:agg.total?agg.porTiempo[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartTiempo){chartTiempo.destroy();chartTiempo=null}if(arrT.length){restoreChartCanvas('wrapGraficoTiempo','graficoTiempo');chartTiempo=new Chart($('graficoTiempo').getContext('2d'),{type:'bar',data:{labels:arrT.map(x=>x.k),datasets:[{data:arrT.map(x=>x.v),borderWidth:1,backgroundColor:arrT.map(x=>timeChartColor(x.k)),borderColor:arrT.map(x=>timeChartColor(x.k))}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:28}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#213',offset:-4,clamp:true,clip:false,formatter:v=>v}},scales:{x:{beginAtZero:true}}}});$('pngTiempo').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoTiempo','Sin datos');$('pngTiempo').style.display='none'}let htmlT='<div class="tabla-datos"><table><thead><tr><th>Tiempo de Entrega</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumT=0;for(const o of arrT){const p=Math.round(o.p*10)/10;sumT+=o.p;htmlT+=`<tr><td>${escapeHtml(o.k)}</td><td>${o.v}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlT+='</tbody></table></div>';$('tablaTiempo').innerHTML=arrT.length?htmlT:'<div class="empty">Sin datos</div>';$('totalTiempo').textContent=arrT.length?`Total: ${Math.round(sumT*10)/10}%`:'';const tc=Object.keys(agg.porClaim).map(k=>({claim:k,cant:agg.porClaim[k],p:agg.total?agg.porClaim[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartClaims){chartClaims.destroy();chartClaims=null}if(tc.length){restoreChartCanvas('wrapGraficoClaims','graficoClaims','claims');chartClaims=new Chart($('graficoClaims').getContext('2d'),{type:'bar',data:{labels:tc.map(x=>x.claim),datasets:[{data:tc.map(x=>x.cant),borderWidth:1,backgroundColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length]),borderColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length])}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});$('pngClaims').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoClaims','Sin datos');$('pngClaims').style.display='none'}let htmlC='<div class="tabla-datos"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumC=0;for(const r of tc){const p=Math.round(r.p*10)/10;sumC+=r.p;htmlC+=`<tr><td>${escapeHtml(r.claim)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlC+='</tbody></table></div>';$('tablaClaims').innerHTML=tc.length?htmlC:'<div class="empty">Sin datos</div>';$('totalClaims').textContent=tc.length?`Total: ${Math.round(sumC*10)/10}%`:'';$('valorEfectividad').textContent=agg.efectividad==null?'-':agg.efectividad.toFixed(1)+'%';$('valorEfectividadTiempo').textContent=agg.efectividadTiempo==null?'-':agg.efectividadTiempo.toFixed(1)+'%'}
@@ -2948,7 +2978,8 @@ function downloadPNG(id){const c=$(id),a=document.createElement('a');a.download=
 function dailyOrdersData(){
   const m=$('dMonth').value;
   if(!m)return{month:m,counts:{}};
-  if(isMonthExplicitlyClosed(m))return{month:m,counts:db.snapshots[m].agg?.porFechaGuia||{}};
+  const snapAgg=dashboardSnapshotAgg(m);
+  if(snapAgg)return{month:m,counts:snapAgg.porFechaGuia||{}};
   const counts={};
   for(const o of Object.values(db.orders)){
     if(monthKey(o.fechaGuia)!==m)continue;
@@ -3020,7 +3051,7 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){const m=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)});ensureClaimFilterOptions()}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');const m=$('dMonth')?.value;if(m&&!isMonthExplicitlyClosed(m))await ensureOrdersMonthLoaded(m);setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){const m=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)});ensureClaimFilterOptions()}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');ensureMonthSelects();setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
@@ -3221,7 +3252,7 @@ $('copyGeneral').addEventListener('click',()=>copyInfoSection('general'));
 $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOBIP_INGRESANDO_AGENCIA.xlsx'));
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
-$('dMonth').addEventListener('change',async()=>{const m=$('dMonth').value;if(m&&!isMonthExplicitlyClosed(m)&&(!confirmedSessionMonths.has(m)||localMonthCount(m)===0)){await loadOrdersMonthOnce(m,{force:true,advanceWatermark:false,includeInactiveFull:true});ensureMonthSelects();if([...$('dMonth').options].some(o=>o.value===m))$('dMonth').value=m;}renderDashboard()});$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',async()=>{const m=$('dMonth').value;if(!m||isMonthExplicitlyClosed(m))return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? El mes quedará archivado y seguirá disponible para consulta. No se borrará el detalle de las guías.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),closedExplicit:true,manualClose:true,closureSource:'manual',closureBuild:APP_BUILD,rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const touched=[];for(const o of rows){o._active=false;o._archived=true;o._editedFields=o._editedFields||{};touched.push(o.guia)}saveDB();await syncExplicitBulkNow('close-month',{snapshotKeys:[m],orderGuides:touched});renderAll();if([...$('dMonth').options].some(o=>o.value===m))$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado y archivado`)});
+$('dMonth').addEventListener('change',()=>{renderDashboard()});$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',async()=>{const m=$('dMonth').value;if(!m||isMonthExplicitlyClosed(m))return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? El mes quedará archivado y seguirá disponible para consulta. No se borrará el detalle de las guías.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),closedExplicit:true,manualClose:true,closureSource:'manual',closureBuild:APP_BUILD,rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const touched=[];for(const o of rows){o._active=false;o._archived=true;o._editedFields=o._editedFields||{};touched.push(o.guia)}saveDB();await syncExplicitBulkNow('close-month',{snapshotKeys:[m],orderGuides:touched});renderAll();if([...$('dMonth').options].some(o=>o.value===m))$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado y archivado`)});
 // Laboratorio de sincronización de bases · v48 · lote de 100
 const SYNC_TEST_KEY='servientrega_sync_test_v44';
 const SYNC_TEST_COUNT=100;
@@ -3451,13 +3482,13 @@ $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none
 
 updateBulkClaimUI();
 window.addEventListener('pagehide',()=>{try{cachePut('db',db)}catch(e){}});
-// v90: cambio de mes transaccional + lectura histórica segura.
+// v91: cambio de mes seguro + snapshots históricos legítimos.
 // v88: estabilidad primero. Nunca recargar automáticamente por una versión detectada
 // en GitHub: durante el despliegue GitHub Pages puede servir temporalmente una versión
 // anterior y provocar un rebote (v88 -> v85). La versión se actualiza únicamente al
 // recargar/abrir la página por decisión del usuario.
 async function checkPublishedBuild(){
-  const bs=$('buildStatus');if(bs)bs.textContent='v90';
+  const bs=$('buildStatus');if(bs)bs.textContent='v92';
 }
 
 // v88: sin auto-reload ni polling de versión.
