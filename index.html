@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v83</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v85</span></div>
 </aside>
 
 <main class="main">
@@ -679,7 +679,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v83.20261105.1';
+const APP_BUILD='v85.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -709,7 +709,7 @@ function setCloudStatus(text,state=''){
   const dot=document.querySelector('.sidebar-bottom .live-dot');
   const raw=String(text||'Firebase').replace(/^Firebase:\s*/i,'').trim();
   if(state==='error'||/(desconectado|sin conexión|sin internet|error|permiso denegado|tiempo agotado|configuración)/i.test(raw))firebaseServerLive=false;
-  if(state!=='error'&&/(en vivo|conectado|guardado|sincronizado|confirmado|actualización recibida|cambio confirmado)/i.test(raw))firebaseServerLive=true;
+  if(state!=='error'&&/(en vivo|conectado|guardado|sincronizado|confirmado|validado|conciliado|actualización recibida|cambio confirmado)/i.test(raw))firebaseServerLive=true;
   // UI final: no mostrar contadores ni mensajes operativos en el sidebar.
   // El detalle queda solo en tooltip para diagnóstico.
   el.textContent='Firebase';
@@ -1186,7 +1186,7 @@ function startBulkManifestListener(){
   },err=>{console.error('Bulk manifest listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
 }
 function startRealtimeStreams(){
-  ordersListenerMode='streams';startLiveEventListener();startBulkManifestListener();finishOrdersServerReady();
+  ordersListenerMode='streams';startLiveEventListener();startBulkManifestListener();
 }
 
 function processSyncSignal(signal){
@@ -1683,7 +1683,13 @@ async function aggregateMonthCount(month){
   const [appMod,fireMod]=await getAggregateModules();
   let app=appMod.getApps().find(a=>a.name==='servientrega-count');
   if(!app)app=appMod.initializeApp(FIREBASE_CONFIG,'servientrega-count');
-  if(!aggregateFirestore)aggregateFirestore=fireMod.getFirestore(app);
+  if(!aggregateFirestore){
+    aggregateFirestore=fireMod.initializeFirestore(app,{
+      ignoreUndefinedProperties:true,
+      experimentalForceLongPolling:true,
+      experimentalLongPollingOptions:{timeoutSeconds:15}
+    });
+  }
   const base=fireMod.collection(aggregateFirestore,FB.orders);
   let q=fireMod.query(base,
     fireMod.where('fechaGuia','>=',b.start),
@@ -1776,85 +1782,58 @@ async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}
 async function ensureOrdersMonthLoaded(month){
   month=String(month||'');
   if(!month||db.snapshots?.[month])return true;
-  if(validatedOrderMonths.has(month))return true;
-  if(!firebaseReady||!fsDB)return loadedOrderMonths.has(month);
+  if(!firebaseReady||!fsDB)return localMonthCount(month)>0;
+
+  const localCount=localMonthCount(month);
+  if(localCount>0&&readOrdersWatermark()>0){
+    knownOrderMonths.add(month);loadedOrderMonths.add(month);saveLoadedMonthsState();
+    // No bloquea el cambio de mes. La auditoría corre en segundo plano.
+    setTimeout(()=>validateMonthInBackground(month),250);
+    return true;
+  }
+
+  // Mes que esta PC nunca tuvo: sí requiere una sola carga completa.
   try{
-    const check=await validateMonthCheap(month);
-    const hasReliableDelta=readOrdersWatermark()>0;
-    if(check.match&&hasReliableDelta){
-      knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);saveLoadedMonthsState();
-      setCloudStatus(`Firebase: ${monthName(month)} validado · ${check.server} pedidos · ${liveTime()}`);
-      return true;
-    }
-    // Solo esta PC y solo este mes se descargan completos cuando el conteo difiere
-    // o cuando no existe un watermark confiable para continuar por delta.
-    setOrdersSourceState('validating',`Conciliando ${monthName(month)} · ${check.local}/${check.server} pedidos…`);
+    setOrdersSourceState('validating',`Cargando ${monthName(month)} desde Firebase…`);
     const ok=await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false});
-    if(ok)validatedOrderMonths.add(month);
+    if(ok){validatedOrderMonths.add(month);markReconciled();setOrdersSourceState('server');firebaseServerLive=true;setCloudStatus(`Firebase: ${monthName(month)} conciliado · ${liveTime()}`);}
     return !!ok;
   }catch(err){
-    console.error('Month validation/load',month,err);
-    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    console.warn('Month load',month,err);
+    if(firebaseServerLive){setOrdersSourceState('server');setCloudStatus('Firebase: EN VIVO · mes pendiente de validar');}
+    else{setOrdersSourceState('local');setCloudStatus('Firebase: '+firebaseErrorText(err),'error');}
     return false;
   }
-}
-
-function readOrdersWatermark(){
-  if(ordersWatermark>0)return ordersWatermark;
-  try{const n=Number(localStorage.getItem(SYNC_WATERMARK_KEY)||0);if(Number.isFinite(n)&&n>0)ordersWatermark=n}catch(e){}
-  return ordersWatermark||0;
-}
-function writeOrdersWatermark(v){
-  const n=Number(v||0);if(!Number.isFinite(n)||n<=0)return;
-  if(n>ordersWatermark)ordersWatermark=n;
-  try{localStorage.setItem(SYNC_WATERMARK_KEY,String(ordersWatermark))}catch(e){}
-}
-function maxSyncAtInSnapshot(snap){
-  let m=0;snap.forEach(doc=>{const d=doc.data()||{},n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>m)m=n});return m;
-}
-function finishOrdersServerReady(){
-  ordersServerSnapshotSeen=true;ordersInitialSnapshot=true;clearTimeout(ordersFallbackTimer);setOrdersSourceState('server');
-  firebaseServerLive=true;setCloudStatus('Firebase: EN VIVO · '+liveTime());sessionStorage.removeItem('servi_version_reload_tried');
-}
-function stopOrdersListener(){
-  if(ordersUnsub)try{ordersUnsub()}catch(e){}ordersUnsub=null;
-  if(liveEventUnsub)try{liveEventUnsub()}catch(e){}liveEventUnsub=null;
-  if(bulkManifestUnsub)try{bulkManifestUnsub()}catch(e){}bulkManifestUnsub=null;
-}
-function startDeltaOrdersListener(){
-  // v83: ya NO escuchamos servientrega_pedidos. Ese listener multiplicaba cada
-  // carga masiva por todas las PCs conectadas. El realtime usa eventos/paquetes.
-  startRealtimeStreams();
 }
 async function startFullOrdersSeed({legacyOrders=false}={}){
   stopOrdersListener();ordersListenerMode='month-check';
   const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
-  setOrdersSourceState('validating',`Validando ${monthName(month)} con Firebase…`);
+  const localCount=localMonthCount(month);
+  const hasLocalContinuity=localCount>0&&readOrdersWatermark()>0&&!legacyOrders;
+
+  // Operación normal: mostrar la caché inmediatamente y conectar streams livianos.
+  // La auditoría de conteo corre detrás y solo concilia si detecta diferencia.
+  if(hasLocalContinuity){
+    knownOrderMonths.add(month);loadedOrderMonths.add(month);saveLoadedMonthsState();
+    ordersServerSnapshotSeen=true;ordersInitialSnapshot=true;clearTimeout(ordersFallbackTimer);
+    setOrdersSourceState('server');renderAll();
+    startRealtimeStreams();
+    setTimeout(()=>validateMonthInBackground(month),350);
+    return;
+  }
+
+  // PC nueva / sin continuidad fiable: una única descarga completa del mes es necesaria.
+  setOrdersSourceState('validating',`Cargando ${monthName(month)} desde Firebase…`);
   try{
-    const check=await validateMonthCheap(month);
-    const hasReliableDelta=meaningfulLocal(db)&&readOrdersWatermark()>0&&!legacyOrders;
-    if(check.match&&hasReliableDelta){
-      knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);saveLoadedMonthsState();
-      markReconciled();
-      ordersServerSnapshotSeen=true;ordersInitialSnapshot=true;clearTimeout(ordersFallbackTimer);
-      setOrdersSourceState('server');firebaseServerLive=true;
-      setCloudStatus(`Firebase: ${monthName(month)} validado · ${check.server} pedidos · ${liveTime()}`);
-      renderAll();
-      setTimeout(()=>startDeltaOrdersListener(),0);
-      return;
-    }
-    // ÚNICAMENTE la PC que no coincide (o no tiene watermark fiable) descarga
-    // el mes completo. Las PCs ya cuadradas no vuelven a leer miles de pedidos.
-    ordersListenerMode='month-seed';
-    setOrdersSourceState('validating',`Conciliando ${monthName(month)} · ${check.local}/${check.server} pedidos…`);
     await loadOrdersMonthOnce(month,{force:true,advanceWatermark:true});
-    validatedOrderMonths.add(month);
-    markReconciled();
-    setTimeout(()=>startDeltaOrdersListener(),0);
+    validatedOrderMonths.add(month);markReconciled();
+    setOrdersSourceState('server');firebaseServerLive=true;
+    setCloudStatus(`Firebase: ${monthName(month)} conciliado · ${liveTime()}`);renderAll();
+    startRealtimeStreams();
   }catch(err){
-    console.error('Orders month validation',err);firebaseServerLive=false;
+    console.error('Orders initial month seed',err);firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('local');renderAll();
-    toast('Firebase no pudo validar '+monthName(month)+': '+firebaseErrorText(err));
+    toast('Firebase no pudo cargar '+monthName(month)+': '+firebaseErrorText(err));
   }
 }
 async function reconcileCurrentMonthForBuild(){
@@ -3435,7 +3414,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v83';
+      const bs=$('buildStatus');if(bs)bs.textContent='v85';
     }
   }catch(e){
     console.warn('Build check',e);
