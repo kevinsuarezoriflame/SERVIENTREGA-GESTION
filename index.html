@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v82</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v83</span></div>
 </aside>
 
 <main class="main">
@@ -632,6 +632,12 @@ const CACHE_DB_NAME='servientrega_oriflame_cache_v53';
 const CACHE_STORE='kv';
 const SYNC_WATERMARK_KEY='servientrega_orders_watermark_v53';
 const DELTA_SAFETY_MS=5*60*1000;
+// v83: realtime desacoplado de servientrega_pedidos.
+// Los cambios individuales viajan por eventos livianos y las cargas masivas por paquetes.
+const LIVE_EVENT_WATERMARK_KEY='servientrega_live_event_watermark_v83';
+const BULK_MANIFEST_WATERMARK_KEY='servientrega_bulk_manifest_watermark_v83';
+const BULK_PACKET_SIZE=50;
+const BULK_PACKET_THRESHOLD=20;
 const LOADED_MONTHS_KEY='servientrega_loaded_months_v81';
 const RECONCILE_BUILD_KEY='servientrega_reconcile_build_v79';
 const RECONCILE_SCHEMA_KEY='servientrega_reconcile_schema';
@@ -660,6 +666,8 @@ let bulkClaimMode=false,bulkClaimSelected=new Set(),provinceMapToken=0,ecuadorGe
 let ordersVisibleLimit=ROW_BATCH_SIZE,lastOrdersFilterSignature='',ordersFilterTimer=null,ordersLastTotal=0;
 let cacheDBPromise=null,cacheSaveTimer=null,cacheHydrated=false,memorySafetyBackup=null;
 let ordersUnsub=null,ordersListenerMode='',ordersWatermark=0;
+let liveEventUnsub=null,bulkManifestUnsub=null,liveEventWatermark=0,bulkManifestWatermark=0;
+let bulkApplyQueue=Promise.resolve();
 let knownOrderMonths=new Set(),loadedOrderMonths=new Set(),validatedOrderMonths=new Set(),monthLoadPromises=new Map();
 const $=id=>document.getElementById(id);
 
@@ -671,7 +679,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v82.20261104.1';
+const APP_BUILD='v83.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1042,6 +1050,145 @@ async function refreshOrdersFromServer(){
     setCloudStatus('Firebase: EN VIVO · '+liveTime());
   }catch(err){console.error('Refresh orders server',err)}
 }
+function currentVisibleMonths(){
+  return new Set([$('pMonth')?.value,$('iMonth')?.value,$('dMonth')?.value].filter(Boolean));
+}
+function shouldApplyStreamOrder(d,guia=''){
+  const month=monthKey(d?.fechaGuia||'');
+  if(guia&&db.orders[guia])return true;
+  if(month&&loadedOrderMonths.has(month))return true;
+  return month&&currentVisibleMonths().has(month);
+}
+function readLiveEventWatermark(){
+  if(liveEventWatermark>0)return liveEventWatermark;
+  try{const n=Number(localStorage.getItem(LIVE_EVENT_WATERMARK_KEY)||0);if(Number.isFinite(n)&&n>0)liveEventWatermark=n}catch(e){}
+  if(!liveEventWatermark)liveEventWatermark=Math.max(0,readOrdersWatermark()||Date.now()-86400000);
+  return liveEventWatermark;
+}
+function writeLiveEventWatermark(v){
+  const n=Number(v||0);if(!Number.isFinite(n)||n<=0)return;
+  if(n>liveEventWatermark)liveEventWatermark=n;
+  try{localStorage.setItem(LIVE_EVENT_WATERMARK_KEY,String(liveEventWatermark))}catch(e){}
+}
+function readBulkManifestWatermark(){
+  if(bulkManifestWatermark>0)return bulkManifestWatermark;
+  try{const n=Number(localStorage.getItem(BULK_MANIFEST_WATERMARK_KEY)||0);if(Number.isFinite(n)&&n>0)bulkManifestWatermark=n}catch(e){}
+  if(!bulkManifestWatermark)bulkManifestWatermark=Math.max(0,readOrdersWatermark()||Date.now()-86400000);
+  return bulkManifestWatermark;
+}
+function writeBulkManifestWatermark(v){
+  const n=Number(v||0);if(!Number.isFinite(n)||n<=0)return;
+  if(n>bulkManifestWatermark)bulkManifestWatermark=n;
+  try{localStorage.setItem(BULK_MANIFEST_WATERMARK_KEY,String(bulkManifestWatermark))}catch(e){}
+}
+function liveEventsRef(){return fsDB.collection(FB.sync).doc('live').collection('events')}
+function bulkManifestsRef(){return fsDB.collection(FB.sync).doc('bulk').collection('manifests')}
+async function publishLiveOrderEvents(orderGuides=[],deleteOrderGuides=[],kind='order'){
+  if(!firebaseReady||!fsDB)return;
+  const items=[];let maxAt=0;
+  for(const guia of [...new Set((orderGuides||[]).map(String).filter(Boolean))]){
+    const d=db.orders[guia];if(!d)continue;
+    const at=Number(d._syncAt||0)||Date.now();maxAt=Math.max(maxAt,at);
+    items.push({guide:guia,deleted:false,payload:mapPayload('orders',guia,d),at,kind,client:CLIENT_ID,build:APP_BUILD});
+  }
+  for(const guia of [...new Set((deleteOrderGuides||[]).map(String).filter(Boolean))]){
+    const at=Date.now();maxAt=Math.max(maxAt,at);items.push({guide:guia,deleted:true,at,kind,client:CLIENT_ID,build:APP_BUILD});
+  }
+  for(let i=0;i<items.length;i+=350){
+    const batch=fsDB.batch();
+    for(const ev of items.slice(i,i+350))batch.set(liveEventsRef().doc(safeDocId(ev.guide)),guardedData(ev),{merge:false});
+    await firebaseTimeout(batch.commit(),45000,'Eventos en vivo');
+  }
+  if(maxAt)writeLiveEventWatermark(maxAt);
+}
+async function publishBulkPackage(kind,orderGuides=[],deleteOrderGuides=[]){
+  if(!firebaseReady||!fsDB)return;
+  const items=[];let maxSyncAt=0;
+  for(const guia of [...new Set((orderGuides||[]).map(String).filter(Boolean))]){
+    const d=db.orders[guia];if(!d)continue;
+    const payload=mapPayload('orders',guia,d),n=Number(payload._syncAt||0);if(Number.isFinite(n)&&n>maxSyncAt)maxSyncAt=n;
+    items.push({guide:guia,deleted:false,payload});
+  }
+  for(const guia of [...new Set((deleteOrderGuides||[]).map(String).filter(Boolean))])items.push({guide:guia,deleted:true});
+  if(!items.length)return;
+  const at=Date.now(),batchId='b_'+at.toString(36)+'_'+Math.random().toString(36).slice(2,8);
+  const manifestRef=bulkManifestsRef().doc(batchId),packets=[];
+  for(let i=0;i<items.length;i+=BULK_PACKET_SIZE)packets.push(items.slice(i,i+BULK_PACKET_SIZE));
+  for(let i=0;i<packets.length;i+=300){
+    const batch=fsDB.batch();
+    for(let j=i;j<Math.min(i+300,packets.length);j++){
+      const ref=manifestRef.collection('packets').doc(String(j).padStart(4,'0'));
+      batch.set(ref,guardedData({batchId,index:j,items:packets[j],at,client:CLIENT_ID,build:APP_BUILD}),{merge:false});
+    }
+    await firebaseTimeout(batch.commit(),45000,'Paquetes de sincronización');
+  }
+  await firebaseTimeout(manifestRef.set(guardedData({batchId,kind,packetCount:packets.length,count:items.length,at,maxSyncAt,client:CLIENT_ID,build:APP_BUILD}),{merge:false}),15000,'Manifiesto de sincronización');
+  writeBulkManifestWatermark(at);if(maxSyncAt)writeOrdersWatermark(maxSyncAt);
+}
+async function publishOrderDistribution(kind,orderGuides=[],deleteOrderGuides=[]){
+  const total=new Set([...(orderGuides||[]).map(String),...(deleteOrderGuides||[]).map(String)]).size;
+  if(!total)return;
+  if(total>=BULK_PACKET_THRESHOLD)return publishBulkPackage(kind,orderGuides,deleteOrderGuides);
+  return publishLiveOrderEvents(orderGuides,deleteOrderGuides,kind);
+}
+async function applyBulkManifest(manifest){
+  if(!manifest||!manifest.batchId)return;
+  const at=Number(manifest.at||0);if(at&&at<=readBulkManifestWatermark())return;
+  if(manifest.client===CLIENT_ID){writeBulkManifestWatermark(at);return}
+  try{
+    setCloudStatus(`Firebase: recibiendo ${Number(manifest.count||0)} cambios...`,'saving');
+    const snap=await firebaseTimeout(bulkManifestsRef().doc(manifest.batchId).collection('packets').orderBy('index').get({source:'server'}),30000,'Paquetes remotos');
+    let changed=false,applied=0;
+    for(const doc of snap.docs){
+      const packet=stripWriteGuard(doc.data()||{});
+      for(const item of packet.items||[]){
+        const guia=String(item.guide||'');if(!guia)continue;
+        if(item.deleted){if(db.orders[guia]){delete db.orders[guia];delete cloudFP.orders[guia];changed=true;applied++}continue}
+        const d=stripWriteGuard(item.payload||{});if(!shouldApplyStreamOrder(d,guia))continue;
+        const prev=db.orders[guia];db.orders[guia]=d;cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,d));
+        const mk=monthKey(d.fechaGuia);if(mk)knownOrderMonths.add(mk);
+        if(!prev||stableJSON(prev)!==stableJSON(d)){changed=true;applied++}
+      }
+    }
+    if(Number(manifest.maxSyncAt||0)>0)writeOrdersWatermark(Number(manifest.maxSyncAt));
+    writeBulkManifestWatermark(at);localCache();
+    if(changed)scheduleCloudRender();
+    setCloudStatus(`Firebase: ${applied} cambios recibidos · ${liveTime()}`);
+  }catch(err){console.error('Bulk package apply',err);setCloudStatus('Firebase: error al recibir paquete','error')}
+}
+function startLiveEventListener(){
+  if(liveEventUnsub)try{liveEventUnsub()}catch(e){};
+  const base=readLiveEventWatermark();
+  liveEventUnsub=liveEventsRef().where('at','>',base).orderBy('at').onSnapshot({includeMetadataChanges:true},snap=>{
+    if(snap.metadata.fromCache)return;
+    const currentWm=readLiveEventWatermark();let maxAt=currentWm,changed=false;
+    for(const doc of snap.docs){
+      const ev=stripWriteGuard(doc.data()||{}),at=Number(ev.at||0);if(at<=currentWm)continue;if(at>maxAt)maxAt=at;
+      if(ev.client===CLIENT_ID)continue;
+      const guia=String(ev.guide||'');if(!guia)continue;
+      if(ev.deleted){if(db.orders[guia]){delete db.orders[guia];delete cloudFP.orders[guia];changed=true}continue}
+      const d=stripWriteGuard(ev.payload||{});if(!shouldApplyStreamOrder(d,guia))continue;
+      const prev=db.orders[guia];db.orders[guia]=d;cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,d));
+      const mk=monthKey(d.fechaGuia);if(mk)knownOrderMonths.add(mk);
+      if(!prev||stableJSON(prev)!==stableJSON(d))changed=true;
+    }
+    if(maxAt>currentWm)writeLiveEventWatermark(maxAt);if(changed){localCache();scheduleCloudRender()}
+    finishOrdersServerReady();
+  },err=>{console.error('Live event listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
+}
+function startBulkManifestListener(){
+  if(bulkManifestUnsub)try{bulkManifestUnsub()}catch(e){};
+  const base=readBulkManifestWatermark();
+  bulkManifestUnsub=bulkManifestsRef().where('at','>',base).orderBy('at').onSnapshot({includeMetadataChanges:true},snap=>{
+    if(snap.metadata.fromCache)return;
+    for(const doc of snap.docs){const manifest=stripWriteGuard(doc.data()||{});bulkApplyQueue=bulkApplyQueue.then(()=>applyBulkManifest(manifest)).catch(err=>console.error('Bulk queue',err))}
+    finishOrdersServerReady();
+  },err=>{console.error('Bulk manifest listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
+}
+function startRealtimeStreams(){
+  ordersListenerMode='streams';startLiveEventListener();startBulkManifestListener();finishOrdersServerReady();
+}
+
 function processSyncSignal(signal){
   if(!signal||signal.client===CLIENT_ID||!signal.nonce||signal.nonce===lastSyncNonce)return;
   lastSyncNonce=signal.nonce;
@@ -1114,8 +1261,9 @@ function updateOrderLive(guia,patch,{render='smart'}={}){
   ref.set(guardedData({...patch,...meta}),{merge:true}).then(()=>{
     cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,db.orders[guia]));
     flashSaved();
-    // La señal es respaldo y NO retrasa el guardado principal.
-    publishSyncSignal('order',guia,1,meta._syncAt);
+    // v83: el resto de PCs recibe un evento liviano con el pedido ya confirmado.
+    // No existe listener permanente sobre servientrega_pedidos.
+    publishLiveOrderEvents([guia],[],'order').catch(err=>console.error('Live order event',err));
   }).catch(err=>{
     delete cloudFP.orders[guia];
     if(handleWriteError(err,'Live order update'))return;
@@ -1251,8 +1399,10 @@ async function syncDBToCloud(){
     if(ops.length){
       const orderOps=ops.filter(op=>op.collection===FB.orders);
       await commitOps(ops);
-      if(orderOps.length===1)publishSyncSignal('order',orderOps[0].key,1,Number(db.orders[orderOps[0].key]?._syncAt||0));
-      else if(orderOps.length>1)publishSyncSignal('bulk','',orderOps.length);
+      if(orderOps.length){
+        const sets=orderOps.filter(op=>op.type!=='delete').map(op=>op.key),dels=orderOps.filter(op=>op.type==='delete').map(op=>op.key);
+        await publishOrderDistribution('db-sync',sets,dels);
+      }
     }
     // Update local fingerprints immediately; listeners will confirm them as well.
     cloudFP.config=cfgS;
@@ -1666,54 +1816,15 @@ function finishOrdersServerReady(){
   ordersServerSnapshotSeen=true;ordersInitialSnapshot=true;clearTimeout(ordersFallbackTimer);setOrdersSourceState('server');
   firebaseServerLive=true;setCloudStatus('Firebase: EN VIVO · '+liveTime());sessionStorage.removeItem('servi_version_reload_tried');
 }
-function stopOrdersListener(){if(ordersUnsub)try{ordersUnsub()}catch(e){}ordersUnsub=null}
+function stopOrdersListener(){
+  if(ordersUnsub)try{ordersUnsub()}catch(e){}ordersUnsub=null;
+  if(liveEventUnsub)try{liveEventUnsub()}catch(e){}liveEventUnsub=null;
+  if(bulkManifestUnsub)try{bulkManifestUnsub()}catch(e){}bulkManifestUnsub=null;
+}
 function startDeltaOrdersListener(){
-  stopOrdersListener();ordersListenerMode='delta';
-  const base=readOrdersWatermark();
-  const cutoff=Math.max(0,base-DELTA_SAFETY_MS);
-  // Una sola condición por _syncAt: no requiere índice compuesto.
-  // Incluye tombstones, de modo que también elimina localmente pedidos cerrados/borrados lógicamente.
-  const ref=fsDB.collection(FB.orders).where('_syncAt','>',cutoff);
-  ordersUnsub=ref.onSnapshot({includeMetadataChanges:true},snap=>{
-    try{
-      lastOrderListenerAt=Date.now();
-      if(snap.metadata.fromCache&&!ordersServerSnapshotSeen){
-        setCloudStatus('Firebase: validando caché...');
-        return;
-      }
-      cloudApplying=true;
-      let changed=false,maxSeen=base;
-      const next={...(db.orders||{})};
-      for(const ch of snap.docChanges()){
-        const raw=ch.doc.data()||{},d=stripWriteGuard(raw);
-        const key=String(d.guia||decodeURIComponent(ch.doc.id));
-        const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n;
-        if(ch.type==='removed'||d._deleted===true||d._active===false){
-          if(next[key]){delete next[key];changed=true}
-          delete cloudFP.orders[key];
-        }else{
-          const prev=next[key];
-          if(!prev||stableJSON(prev)!==stableJSON(d)){next[key]=d;changed=true}
-          const mk=monthKey(d.fechaGuia);if(mk)knownOrderMonths.add(mk);
-          cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
-        }
-      }
-      db.orders=next;cloudApplying=false;
-      if(maxSeen>0)writeOrdersWatermark(maxSeen);
-      localCache();
-      if(!snap.metadata.fromCache){
-        finishOrdersServerReady();
-        if(changed)scheduleCloudRender();
-        else if(!ordersInitialSnapshot)scheduleCloudRender();
-      }else if(changed&&ordersServerSnapshotSeen)renderAll();
-    }catch(err){
-      cloudApplying=false;console.error('Orders delta snapshot',err);setCloudStatus('Firebase: error de pantalla','error');
-    }
-  },err=>{
-    cloudApplying=false;console.error('Orders delta listener',err);firebaseServerLive=false;
-    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('local');renderAll();
-    toast('Firebase no pudo sincronizar cambios: '+firebaseErrorText(err));
-  });
+  // v83: ya NO escuchamos servientrega_pedidos. Ese listener multiplicaba cada
+  // carga masiva por todas las PCs conectadas. El realtime usa eventos/paquetes.
+  startRealtimeStreams();
 }
 async function startFullOrdersSeed({legacyOrders=false}={}){
   stopOrdersListener();ordersListenerMode='month-check';
@@ -1780,7 +1891,7 @@ function setupCloudListeners({legacyOrders=false}={}){
     if(activePageId()==='config')renderConfig();else if(activePageId()==='pedidos')renderOwnerTabs();
   },err=>{console.error('Config listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
 
-  // v82: cada apertura valida primero SOLO EL CONTEO del mes. Nunca confiamos
+  // v83: cada apertura valida primero SOLO EL CONTEO del mes. Nunca confiamos
   // únicamente en una marca local heredada. Si el total coincide, entra a delta
   // sin descargar el mes; si difiere, solo esa PC hace conciliación completa.
   startFullOrdersSeed({legacyOrders});
@@ -1849,7 +1960,7 @@ async function initFirebase(){
       setCloudStatus('Firebase: '+firebaseErrorText(e),'error');
     }
 
-    // v82: valida el conteo mensual primero; solo la PC desfasada descarga el mes completo.
+    // v83: valida el conteo mensual primero; solo la PC desfasada descarga el mes completo.
     const schemaResult=await ensureActiveOrderSchema();
     const legacyOrders=!!schemaResult?.error;
     try{await discoverRecentOrderMonths();renderAll()}catch(e){console.warn('Month discovery',e)}
@@ -2268,9 +2379,9 @@ async function syncExplicitBulkNow(kind,{orderGuides=[],tcGuides=[],serviGuides=
     for(const guia of guidePhoneGuides)if(db.sources.guidePhones[guia]&&!db.orders[guia])cloudFP.guidePhones[guia]=stableJSON(mapPayload('guidePhones',guia,db.sources.guidePhones[guia]));
     for(const key of snapshotKeys)if(db.snapshots[key])cloudFP.snapshots[key]=stableJSON(mapPayload('snapshots',key,db.snapshots[key]));
     localCache();
-    if(ops.length){
+    if(orderGuides.length||deleteOrderGuides.length){
       if(typeof onProgress==='function')onProgress({phase:'signal',done:ops.length,total:ops.length});
-      await publishSyncSignal(kind+'-bulk','',orderGuides.length+deleteOrderGuides.length,Date.now());
+      await publishOrderDistribution(kind,orderGuides,deleteOrderGuides);
     }
     setCloudStatus('Firebase: ✓ sincronizado · '+liveTime());
     return true;
@@ -2314,8 +2425,8 @@ async function syncServiBulkNow(result){
       if(s&&!db.orders[guia])cloudFP.servi[guia]=stableJSON(mapPayload('servi',guia,s));
     }
 
-    // Publish ONLY after all changed orders have reached Firestore.
-    await publishSyncSignal('servi-bulk','',changed.length,Date.now());
+    // v83: distribuir por paquetes/eventos después de confirmar los pedidos canónicos.
+    await publishOrderDistribution('servi',changed,[]);
 
     localCache();
     setCloudStatus(`Firebase: barrido sincronizado · ${changed.length} guías`);
@@ -2533,7 +2644,7 @@ async function applyBulkClaim(){
     await commitOps(ops);
     for(const [g,next] of prepared){db.orders[g]=next;cloudFP.orders[g]=stableJSON(mapPayload('orders',g,next))}
     localCache();
-    await publishSyncSignal('bulk-claim','',changed.length,now);
+    await publishOrderDistribution('bulk-claim',changed,[]);
     setCloudStatus('Firebase: ✓ sincronizado · '+liveTime());
     bulkClaimSelected.clear();updateBulkClaimUI();renderOrders(false,true);
     toast(`${changed.length} pedidos clasificados · ${equal} omitidos iguales`);
@@ -3297,7 +3408,7 @@ $('restoreSafetyBackup')?.addEventListener('click',async()=>{
     toast('Copia local recuperada sin borrar Firebase');
   }catch(err){alert(err.message||err)}
 });
-$('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};await syncDBToCloud();await publishSyncSignal('backup-bulk','',Object.keys(db.orders).length,Date.now());renderAll();toast('Respaldo importado y sincronizado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{saveSafetyBackup(db,'antes_de_borrar_pedidos');if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;const deleted=Object.keys(db.orders);db.orders={};saveDB();syncExplicitBulkNow('clear-orders',{deleteOrderGuides:deleted});renderAll();toast('Pedidos abiertos eliminados')});
+$('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='respaldo_servientrega_oriflame.json';a.click();URL.revokeObjectURL(a.href)});$('importBackup').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x.orders||!x.owners)throw new Error('Respaldo no válido');db=normalizeDB(x);saveDB();cloudFP={config:'',orders:{},contacts:{},tc:{},servi:{},guidePhones:{},snapshots:{}};await syncDBToCloud();renderAll();toast('Respaldo importado y sincronizado')}catch(err){alert(err.message||err)}});$('clearOrders').addEventListener('click',()=>{saveSafetyBackup(db,'antes_de_borrar_pedidos');if(!confirm('¿Borrar todos los pedidos abiertos? El Maestro de Contactos, Configuración y meses cerrados se conservarán.'))return;const deleted=Object.keys(db.orders);db.orders={};saveDB();syncExplicitBulkNow('clear-orders',{deleteOrderGuides:deleted});renderAll();toast('Pedidos abiertos eliminados')});
 $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none');$('socioModal').addEventListener('click',e=>{if(e.target===$('socioModal'))$('socioModal').style.display='none'});
 
 updateBulkClaimUI();
@@ -3324,7 +3435,7 @@ async function checkPublishedBuild(){
         location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
       },250);
     }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v82';
+      const bs=$('buildStatus');if(bs)bs.textContent='v83';
     }
   }catch(e){
     console.warn('Build check',e);
