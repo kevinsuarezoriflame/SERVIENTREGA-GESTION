@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v89</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v90</span></div>
 </aside>
 
 <main class="main">
@@ -661,7 +661,7 @@ const LOCALIDAD_PROV={
 function freshDB(){return{version:27,owners:[{name:'Alba',phone:'0985872770',active:true},{name:'Daysi',phone:'0994619101',active:true}],zones:JSON.parse(JSON.stringify(DEFAULT_ZONES)),claims:JSON.parse(JSON.stringify(DEFAULT_CLAIMS)),contacts:{},orders:{},snapshots:{},settings:{holidays:[],pupDays:1},sources:{tc:{},servi:{},guidePhones:{}},syncPending:{servi:{orders:[],sources:[],at:0}}}}
 function normalizeDB(x){x=x||freshDB();x.version=27;x.contacts=x.contacts||{};x.orders=x.orders||{};x.snapshots=x.snapshots||{};x.zones=x.zones||JSON.parse(JSON.stringify(DEFAULT_ZONES));x.claims=x.claims||JSON.parse(JSON.stringify(DEFAULT_CLAIMS));x.owners=x.owners||freshDB().owners;x.settings=x.settings||{};x.settings.holidays=Array.isArray(x.settings.holidays)?x.settings.holidays:[];x.settings.pupDays=Number.isFinite(Number(x.settings.pupDays))?Number(x.settings.pupDays):1;x.sources=x.sources||{};x.sources.tc=x.sources.tc||{};x.sources.servi=x.sources.servi||{};x.sources.guidePhones=x.sources.guidePhones||{};x.syncPending=x.syncPending||{};x.syncPending.servi=x.syncPending.servi||{orders:[],sources:[],at:0};x.syncPending.servi.orders=Array.isArray(x.syncPending.servi.orders)?x.syncPending.servi.orders:[];x.syncPending.servi.sources=Array.isArray(x.syncPending.servi.sources)?x.syncPending.servi.sources:[];return x}
 
-// v89: un resumen/snapshot antiguo NO cierra un mes por sí solo.
+// v90: un resumen/snapshot antiguo NO cierra un mes por sí solo.
 // Solo un cierre manual realizado desde v89+ lleva esta marca explícita.
 function snapshotIsExplicitClose(v){
   return !!(v && (v.closedExplicit===true || v.manualClose===true || v.closureSource==='manual'));
@@ -678,6 +678,7 @@ let ordersUnsub=null,ordersListenerMode='',ordersWatermark=0;
 let liveEventUnsub=null,bulkManifestUnsub=null,liveEventWatermark=0,bulkManifestWatermark=0;
 let bulkApplyQueue=Promise.resolve();
 let knownOrderMonths=new Set(),loadedOrderMonths=new Set(),validatedOrderMonths=new Set(),monthLoadPromises=new Map();
+let confirmedSessionMonths=new Set(),monthSwitchSeq=0,currentOrdersViewMonth='';
 const $=id=>document.getElementById(id);
 
 const FIREBASE_CONFIG={
@@ -688,7 +689,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v89.20261105.1';
+const APP_BUILD='v90.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1747,7 +1748,46 @@ async function discoverRecentOrderMonths(){
   await Promise.all(probes);
   for(const m of cachedOrderMonths())knownOrderMonths.add(m);
 }
-async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}){
+function hasUsableOrderDetail(d){
+  if(!d||!d.fechaGuia)return false;
+  return !!(d.destinatarioOrigen||d.destinatario||d.codDistr||d.numeroOrden||d.direccion||d.provincia||d.ciudad||d.canal||d.socio||d.status);
+}
+function showOrdersMonthLoading(month,msg=''){
+  const name=monthName(month);
+  const t=$('ordersTable');
+  if(t)t.innerHTML=`<tbody><tr><td style="padding:28px;text-align:center;font-weight:800;color:#48685d">${escapeHtml(msg||`Cargando ${name} desde Firebase…`)}</td></tr></tbody>`;
+  const c=$('ordersCount');if(c)c.textContent=`Cargando ${name}…`;
+}
+function showOrdersMonthError(month,msg){
+  const t=$('ordersTable');
+  if(t)t.innerHTML=`<tbody><tr><td style="padding:28px;text-align:center;font-weight:800;color:#b42318">${escapeHtml(msg||`No se pudo cargar ${monthName(month)}`)}</td></tr></tbody>`;
+}
+async function switchOrdersMonth(month,{forceServer=false}={}){
+  month=String(month||'');if(!month)return false;
+  const seq=++monthSwitchSeq;
+  showOrdersMonthLoading(month);
+  const local=localMonthCount(month);
+  try{
+    let ok=true;
+    if(forceServer||!confirmedSessionMonths.has(month)||local===0){
+      ok=await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false,includeInactiveFull:true});
+    }
+    if(seq!==monthSwitchSeq)return false;
+    if(!ok)throw new Error('Firebase no confirmó el mes');
+    confirmedSessionMonths.add(month);currentOrdersViewMonth=month;
+    ensureMonthSelects();
+    if($('pMonth')&&[...$('pMonth').options].some(o=>o.value===month))$('pMonth').value=month;
+    ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true);
+    return true;
+  }catch(err){
+    if(seq!==monthSwitchSeq)return false;
+    console.error('Cambio de mes',month,err);
+    showOrdersMonthError(month,`No se pudo cargar ${monthName(month)} desde Firebase. No se muestran datos de otro mes.`);
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    return false;
+  }
+}
+async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false,includeInactiveFull=false}={}){
   month=String(month||'');if(!firebaseReady||!fsDB||!month)return false;
   if(isMonthExplicitlyClosed(month))return true;
   if(!force&&loadedOrderMonths.has(month))return true;
@@ -1764,7 +1804,9 @@ async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}
     let maxSeen=0;
     snap.forEach(doc=>{
       const raw=doc.data()||{},d=stripWriteGuard(raw),key=String(d.guia||decodeURIComponent(doc.id));
-      if(d._deleted===true||d._active===false)return;
+      const inactive=(d._deleted===true||d._active===false);
+      if(inactive&&!(includeInactiveFull&&hasUsableOrderDetail(d)))return;
+      if(inactive){d._archivedView=true;}
       serverIds.add(key);db.orders[key]=d;cloudFP.orders[key]=stableJSON(mapPayload('orders',key,d));
       const n=Number(d._syncAt||0);if(Number.isFinite(n)&&n>maxSeen)maxSeen=n;
     });
@@ -1776,7 +1818,7 @@ async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}
         if(Object.prototype.hasOwnProperty.call(cloudFP.orders,g)){delete db.orders[g];delete cloudFP.orders[g]}
       }
     }
-    knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);saveLoadedMonthsState();
+    knownOrderMonths.add(month);loadedOrderMonths.add(month);validatedOrderMonths.add(month);confirmedSessionMonths.add(month);saveLoadedMonthsState();
     // Solo el seed inicial puede adelantar el watermark global. Cargar/validar
     // otro mes mientras el listener delta está vivo NO debe saltarse cambios
     // recibidos en paralelo de otros meses.
@@ -2882,7 +2924,7 @@ function renderDashboard(){const m=$('dMonth').value,closed=isMonthExplicitlyClo
     $('sumTotal').textContent='…';$('sumDelivered').textContent='…';$('sumPending').textContent='…';$('sumEffectiveness').textContent='…';
     $('sumDeliveredPct').textContent='Cargando '+monthName(m)+'…';$('sumPendingPct').textContent='';
     $('kpiHD').textContent='…';$('kpiPUP').textContent='…';$('kpiSPO').textContent='…';
-    if(firebaseReady&&!monthLoadPromises.has(m)){ensureOrdersMonthLoaded(m).then(()=>renderDashboard()).catch(err=>console.warn('Dashboard month load',err));}
+    if(firebaseReady&&!monthLoadPromises.has(m)){loadOrdersMonthOnce(m,{force:true,advanceWatermark:false,includeInactiveFull:true}).then(()=>{ensureMonthSelects();if([...$('dMonth').options].some(o=>o.value===m))$('dMonth').value=m;renderDashboard()}).catch(err=>console.warn('Dashboard month load',err));}
     return;
   }
 $('monthStatus').textContent=closed?'MES CERRADO':'MES ABIERTO';$('closeMonth').disabled=!m||closed;const agg=dashboardData();const inferredPending=(agg.porTiempo?.['No entregado']||agg.porTiempo?.['NO ENTREGADO']||0),realDelivered=agg.entregadosReales??Math.max(0,(agg.total||0)-inferredPending),pending=Math.max(0,(agg.total||0)-realDelivered),dp=agg.total?realDelivered*100/agg.total:0,pp=agg.total?pending*100/agg.total:0;$('sumTotal').textContent=agg.total||0;$('sumDelivered').textContent=realDelivered;$('sumPending').textContent=pending;$('sumDeliveredPct').textContent=`${dp.toFixed(1)}% del total`;$('sumPendingPct').textContent=`${pp.toFixed(1)}% del total`;$('sumEffectiveness').textContent=agg.total?`${dp.toFixed(1)}%`:'0%';$('kpiHD').textContent=agg.porCanal.HD||0;$('kpiPUP').textContent=agg.porCanal.PUP||0;$('kpiSPO').textContent=agg.porCanal.SPO||0;renderProvincePanel(agg);const arrT=Object.keys(agg.porTiempo).map(k=>({k,v:agg.porTiempo[k],p:agg.total?agg.porTiempo[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartTiempo){chartTiempo.destroy();chartTiempo=null}if(arrT.length){restoreChartCanvas('wrapGraficoTiempo','graficoTiempo');chartTiempo=new Chart($('graficoTiempo').getContext('2d'),{type:'bar',data:{labels:arrT.map(x=>x.k),datasets:[{data:arrT.map(x=>x.v),borderWidth:1,backgroundColor:arrT.map(x=>timeChartColor(x.k)),borderColor:arrT.map(x=>timeChartColor(x.k))}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:28}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#213',offset:-4,clamp:true,clip:false,formatter:v=>v}},scales:{x:{beginAtZero:true}}}});$('pngTiempo').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoTiempo','Sin datos');$('pngTiempo').style.display='none'}let htmlT='<div class="tabla-datos"><table><thead><tr><th>Tiempo de Entrega</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumT=0;for(const o of arrT){const p=Math.round(o.p*10)/10;sumT+=o.p;htmlT+=`<tr><td>${escapeHtml(o.k)}</td><td>${o.v}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlT+='</tbody></table></div>';$('tablaTiempo').innerHTML=arrT.length?htmlT:'<div class="empty">Sin datos</div>';$('totalTiempo').textContent=arrT.length?`Total: ${Math.round(sumT*10)/10}%`:'';const tc=Object.keys(agg.porClaim).map(k=>({claim:k,cant:agg.porClaim[k],p:agg.total?agg.porClaim[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartClaims){chartClaims.destroy();chartClaims=null}if(tc.length){restoreChartCanvas('wrapGraficoClaims','graficoClaims','claims');chartClaims=new Chart($('graficoClaims').getContext('2d'),{type:'bar',data:{labels:tc.map(x=>x.claim),datasets:[{data:tc.map(x=>x.cant),borderWidth:1,backgroundColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length]),borderColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length])}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});$('pngClaims').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoClaims','Sin datos');$('pngClaims').style.display='none'}let htmlC='<div class="tabla-datos"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumC=0;for(const r of tc){const p=Math.round(r.p*10)/10;sumC+=r.p;htmlC+=`<tr><td>${escapeHtml(r.claim)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlC+='</tbody></table></div>';$('tablaClaims').innerHTML=tc.length?htmlC:'<div class="empty">Sin datos</div>';$('totalClaims').textContent=tc.length?`Total: ${Math.round(sumC*10)/10}%`:'';$('valorEfectividad').textContent=agg.efectividad==null?'-':agg.efectividad.toFixed(1)+'%';$('valorEfectividadTiempo').textContent=agg.efectividadTiempo==null?'-':agg.efectividadTiempo.toFixed(1)+'%'}
@@ -2978,11 +3020,11 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){await ensureOrdersMonthLoaded($('pMonth')?.value);ensureClaimFilterOptions();ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');const m=$('dMonth')?.value;if(m&&!isMonthExplicitlyClosed(m))await ensureOrdersMonthLoaded(m);setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){const m=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)});ensureClaimFilterOptions()}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');const m=$('dMonth')?.value;if(m&&!isMonthExplicitlyClosed(m))await ensureOrdersMonthLoaded(m);setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
-$('pMonth').addEventListener('change',async()=>{await ensureOrdersMonthLoaded($('pMonth').value);ensureProvinceOptions();ensureServiStatusOptions();renderOrders(true)});
+$('pMonth').addEventListener('change',async()=>{const m=$('pMonth').value;await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)})});
 ['pDate','pProvince','pChannel','pStatus','pClaim'].forEach(id=>$(id).addEventListener('change',()=>renderOrders(true)));
 $('pServiStatus').addEventListener('input',debounceOrdersRender);
 $('bulkClaimToggle').addEventListener('click',()=>setBulkClaimMode(!bulkClaimMode));
@@ -3179,7 +3221,7 @@ $('copyGeneral').addEventListener('click',()=>copyInfoSection('general'));
 $('exportAgency').addEventListener('click',()=>exportInfoSection('agency','INFOBIP_INGRESANDO_AGENCIA.xlsx'));
 $('exportGeneral').addEventListener('click',()=>exportInfoSection('general','INFOBIP_MENSAJE_GENERAL.xlsx'));
 // Dashboard
-$('dMonth').addEventListener('change',async()=>{const m=$('dMonth').value;if(m&&!isMonthExplicitlyClosed(m))await ensureOrdersMonthLoaded(m);renderDashboard()});$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',()=>{const m=$('dMonth').value;if(!m||isMonthExplicitlyClosed(m))return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? Se aplicarán las reglas de feriados/PUP, se eliminarán ${rows.length} pedidos operativos y se conservará el dashboard del mes.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),closedExplicit:true,manualClose:true,closureSource:'manual',closureBuild:APP_BUILD,rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const deleted=rows.map(o=>o.guia);for(const o of rows)delete db.orders[o.guia];knownOrderMonths.delete(m);loadedOrderMonths.delete(m);saveLoadedMonthsState();saveDB();syncExplicitBulkNow('close-month',{snapshotKeys:[m],deleteOrderGuides:deleted});renderAll();$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado`)});
+$('dMonth').addEventListener('change',async()=>{const m=$('dMonth').value;if(m&&!isMonthExplicitlyClosed(m)&&(!confirmedSessionMonths.has(m)||localMonthCount(m)===0)){await loadOrdersMonthOnce(m,{force:true,advanceWatermark:false,includeInactiveFull:true});ensureMonthSelects();if([...$('dMonth').options].some(o=>o.value===m))$('dMonth').value=m;}renderDashboard()});$('pngTiempo').addEventListener('click',()=>downloadPNG('graficoTiempo'));$('pngClaims').addEventListener('click',()=>downloadPNG('graficoClaims'));$('closeMonth').addEventListener('click',async()=>{const m=$('dMonth').value;if(!m||isMonthExplicitlyClosed(m))return;const rows=Object.values(db.orders).filter(o=>monthKey(o.fechaGuia)===m);if(!rows.length)return;if(!confirm(`Cerrar ${monthName(m)}? El mes quedará archivado y seguirá disponible para consulta. No se borrará el detalle de las guías.`))return;db.snapshots[m]={closedAt:new Date().toISOString(),closedExplicit:true,manualClose:true,closureSource:'manual',closureBuild:APP_BUILD,rulesApplied:JSON.parse(JSON.stringify(db.settings||{})),agg:computeAgg(rows)};const touched=[];for(const o of rows){o._active=false;o._archived=true;o._editedFields=o._editedFields||{};touched.push(o.guia)}saveDB();await syncExplicitBulkNow('close-month',{snapshotKeys:[m],orderGuides:touched});renderAll();if([...$('dMonth').options].some(o=>o.value===m))$('dMonth').value=m;renderDashboard();toast(`${monthName(m)} cerrado y archivado`)});
 // Laboratorio de sincronización de bases · v48 · lote de 100
 const SYNC_TEST_KEY='servientrega_sync_test_v44';
 const SYNC_TEST_COUNT=100;
@@ -3409,13 +3451,13 @@ $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none
 
 updateBulkClaimUI();
 window.addEventListener('pagehide',()=>{try{cachePut('db',db)}catch(e){}});
-// v89: cierre explícito y recuperación de meses abiertos.
+// v90: cambio de mes transaccional + lectura histórica segura.
 // v88: estabilidad primero. Nunca recargar automáticamente por una versión detectada
 // en GitHub: durante el despliegue GitHub Pages puede servir temporalmente una versión
 // anterior y provocar un rebote (v88 -> v85). La versión se actualiza únicamente al
 // recargar/abrir la página por decisión del usuario.
 async function checkPublishedBuild(){
-  const bs=$('buildStatus');if(bs)bs.textContent='v89';
+  const bs=$('buildStatus');if(bs)bs.textContent='v90';
 }
 
 // v88: sin auto-reload ni polling de versión.
