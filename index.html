@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v86</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v87</span></div>
 </aside>
 
 <main class="main">
@@ -679,7 +679,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v86.20261105.1';
+const APP_BUILD='v87.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -795,44 +795,41 @@ function editedFieldTitle(o,field){const x=editedFieldDate(o,field);return x?`Ed
 function editedFieldClass(o,field,input=false){return editedFieldDate(o,field)?(input?' manual-edited-input':' manual-edited'):''}
 function markEditedFields(o,fields){const next={...(o?._editedFields||{})},today=localISODate();for(const f of fields||[])if(f)next[f]=today;return next}
 function setOrdersSourceState(state,message=''){
+  // v87: no existe modo local operativo. La caché solo acelera el arranque,
+  // pero la interfaz permanece bloqueada hasta recibir confirmación real del servidor.
+  if(state==='local')state='error';
   ordersSourceState=state;
   const overlay=$('ordersLoadingOverlay'),notice=$('ordersSourceNotice');
-  const loading=(state==='loading'||state==='validating');
+  const blocking=(state==='loading'||state==='validating'||state==='error');
   if(overlay){
-    overlay.classList.toggle('hidden',!loading);
+    overlay.classList.toggle('hidden',!blocking);
     const txt=overlay.querySelector('.orders-loading-box span:last-child');
-    if(txt)txt.textContent=message||(state==='validating'?'Validando mes con Firebase…':'Cargando datos de Firebase…');
-  }
-  if(notice){
-    if(state==='local'){
-      notice.textContent=message||'Modo local · datos pendientes de validar con Firebase';
-      notice.classList.add('show');
-    }else{
-      notice.textContent='';notice.classList.remove('show');
+    if(txt){
+      if(state==='error')txt.textContent=message||'Sin conexión a Firebase · reintentando…';
+      else txt.textContent=message||(state==='validating'?'Conectando con Firebase…':'Cargando datos de Firebase…');
     }
   }
+  if(notice){notice.textContent='';notice.classList.remove('show');}
 }
 function finishOrdersServerReady(message=''){
   ordersServerSnapshotSeen=true;
   ordersInitialSnapshot=true;
   clearTimeout(ordersFallbackTimer);
   firebaseServerLive=true;
-  setOrdersSourceState('server');
   setCloudStatus(message||('Firebase: EN VIVO · '+liveTime()));
+  // Si se está cargando un mes que esta PC no tenía, no quitamos el bloqueo
+  // hasta que ese seed termine. Para una caché existente, el stream confirmado
+  // sí habilita inmediatamente la operación en vivo.
+  if(monthLoadPromises.size||ordersListenerMode==='month-seed')return;
+  setOrdersSourceState('server');
 }
 function scheduleOrdersLocalFallback(){
   clearTimeout(ordersFallbackTimer);
   ordersFallbackTimer=setTimeout(()=>{
     if(ordersServerSnapshotSeen)return;
-    // Mientras existe una conciliación mensual en curso NO mostramos la caché como
-    // si fuera autoridad. Un mes grande puede tardar más de 9 segundos en validarse.
-    if(ordersListenerMode==='month-check'||ordersListenerMode==='month-seed'||monthLoadPromises.size){
-      const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
-      setOrdersSourceState('validating',`Validando ${monthName(month)} con Firebase…`);
-      return;
-    }
-    setOrdersSourceState('local');renderAll();
-  },9000);
+    setOrdersSourceState('error','Firebase no ha confirmado conexión · reintentando…');
+    setCloudStatus('Firebase: SIN CONEXIÓN','error');
+  },15000);
 }
 function hasReconcileProof(){
   try{
@@ -1182,7 +1179,7 @@ function startLiveEventListener(){
     }
     if(maxAt>currentWm)writeLiveEventWatermark(maxAt);if(changed){localCache();scheduleCloudRender()}
     finishOrdersServerReady();
-  },err=>{console.error('Live event listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
+  },err=>{console.error('Live event listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('error','Sin conexión a Firebase')});
 }
 function startBulkManifestListener(){
   if(bulkManifestUnsub)try{bulkManifestUnsub()}catch(e){};
@@ -1191,7 +1188,7 @@ function startBulkManifestListener(){
     if(snap.metadata.fromCache)return;
     for(const doc of snap.docs){const manifest=stripWriteGuard(doc.data()||{});bulkApplyQueue=bulkApplyQueue.then(()=>applyBulkManifest(manifest)).catch(err=>console.error('Bulk queue',err))}
     finishOrdersServerReady();
-  },err=>{console.error('Bulk manifest listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
+  },err=>{console.error('Bulk manifest listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('error','Sin conexión a Firebase')});
 }
 function startRealtimeStreams(){
   ordersListenerMode='streams';startLiveEventListener();startBulkManifestListener();
@@ -1790,26 +1787,33 @@ async function loadOrdersMonthOnce(month,{force=false,advanceWatermark=false}={}
 async function ensureOrdersMonthLoaded(month){
   month=String(month||'');
   if(!month||db.snapshots?.[month])return true;
-  if(!firebaseReady||!fsDB)return localMonthCount(month)>0;
+  if(!firebaseReady||!fsDB){setOrdersSourceState('error','Sin conexión a Firebase');return false;}
 
   const localCount=localMonthCount(month);
-  if(localCount>0&&readOrdersWatermark()>0){
-    knownOrderMonths.add(month);loadedOrderMonths.add(month);saveLoadedMonthsState();
-    // No bloquea el cambio de mes. La auditoría corre en segundo plano.
-    setTimeout(()=>validateMonthInBackground(month),250);
+  if(localCount>0&&readOrdersWatermark()>0&&loadedOrderMonths.has(month)){
+    // El mes ya fue cargado antes. Los streams de eventos/paquetes mantienen
+    // esa copia al día; no hacemos una lectura completa al cambiar de pestaña.
+    knownOrderMonths.add(month);
+    if(firebaseServerLive)setOrdersSourceState('server');
     return true;
   }
 
-  // Mes que esta PC nunca tuvo: sí requiere una sola carga completa.
+  // Mes que esta PC nunca tuvo: una única carga completa, bajo demanda.
   try{
+    ordersListenerMode='month-seed';
     setOrdersSourceState('validating',`Cargando ${monthName(month)} desde Firebase…`);
     const ok=await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false});
-    if(ok){validatedOrderMonths.add(month);markReconciled();setOrdersSourceState('server');firebaseServerLive=true;setCloudStatus(`Firebase: ${monthName(month)} conciliado · ${liveTime()}`);}
+    if(ok){
+      validatedOrderMonths.add(month);markReconciled();firebaseServerLive=true;
+      ordersListenerMode='streams';setOrdersSourceState('server');
+      setCloudStatus(`Firebase: ${monthName(month)} EN VIVO · ${liveTime()}`);
+    }
     return !!ok;
   }catch(err){
     console.warn('Month load',month,err);
-    if(firebaseServerLive){setOrdersSourceState('server');setCloudStatus('Firebase: EN VIVO · mes pendiente de validar');}
-    else{setOrdersSourceState('local');setCloudStatus('Firebase: '+firebaseErrorText(err),'error');}
+    ordersListenerMode='streams';
+    setOrdersSourceState('error',`No se pudo cargar ${monthName(month)} desde Firebase`);
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
     return false;
   }
 }
@@ -1819,28 +1823,29 @@ async function startFullOrdersSeed({legacyOrders=false}={}){
   const localCount=localMonthCount(month);
   const hasLocalContinuity=localCount>0&&readOrdersWatermark()>0&&!legacyOrders;
 
-  // Operación normal: mostrar la caché inmediatamente y conectar streams livianos.
-  // La auditoría de conteo corre detrás y solo concilia si detecta diferencia.
+  // Siempre conectamos primero los streams livianos. Una respuesta del servidor,
+  // incluso vacía, confirma que esta sesión está realmente EN VIVO.
+  setOrdersSourceState('validating',`Conectando ${monthName(month)} con Firebase…`);
+  startRealtimeStreams();
+
   if(hasLocalContinuity){
     knownOrderMonths.add(month);loadedOrderMonths.add(month);saveLoadedMonthsState();
-    ordersServerSnapshotSeen=true;ordersInitialSnapshot=true;clearTimeout(ordersFallbackTimer);
-    setOrdersSourceState('server');renderAll();
-    startRealtimeStreams();
-    setTimeout(()=>validateMonthInBackground(month),350);
+    // No confiamos en la caché hasta que finishOrdersServerReady() reciba
+    // un snapshot real de los streams. No hay modo local operativo.
     return;
   }
 
-  // PC nueva / sin continuidad fiable: una única descarga completa del mes es necesaria.
-  setOrdersSourceState('validating',`Cargando ${monthName(month)} desde Firebase…`);
+  // PC nueva / mes actual ausente: seed completo una sola vez.
+  ordersListenerMode='month-seed';
   try{
     await loadOrdersMonthOnce(month,{force:true,advanceWatermark:true});
-    validatedOrderMonths.add(month);markReconciled();
-    setOrdersSourceState('server');firebaseServerLive=true;
-    setCloudStatus(`Firebase: ${monthName(month)} conciliado · ${liveTime()}`);renderAll();
-    startRealtimeStreams();
+    validatedOrderMonths.add(month);markReconciled();firebaseServerLive=true;
+    ordersListenerMode='streams';setOrdersSourceState('server');
+    setCloudStatus(`Firebase: ${monthName(month)} EN VIVO · ${liveTime()}`);renderAll();
   }catch(err){
-    console.error('Orders initial month seed',err);firebaseServerLive=false;
-    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('local');renderAll();
+    console.error('Orders initial month seed',err);firebaseServerLive=false;ordersListenerMode='streams';
+    setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
+    setOrdersSourceState('error',`No se pudo cargar ${monthName(month)} desde Firebase`);
     toast('Firebase no pudo cargar '+monthName(month)+': '+firebaseErrorText(err));
   }
 }
@@ -1871,12 +1876,13 @@ function setupCloudListeners({legacyOrders=false}={}){
   if(listenersStarted||!fsDB)return;listenersStarted=true;
 
   fsDB.collection(FB.config).doc('principal').onSnapshot({includeMetadataChanges:true},doc=>{
+    if(!doc.metadata.fromCache)finishOrdersServerReady('Firebase: EN VIVO · '+liveTime());
     if(!doc.exists)return;
     const d=stripWriteGuard(doc.data()||{});if(d._deleted)return;
     cloudFP.config=stableJSON(d);
     cloudApplying=true;applyConfigDoc(d);cloudApplying=false;localCache();
     if(activePageId()==='config')renderConfig();else if(activePageId()==='pedidos')renderOwnerTabs();
-  },err=>{console.error('Config listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error')});
+  },err=>{console.error('Config listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('error','Sin conexión a Firebase')});
 
   // v83: cada apertura valida primero SOLO EL CONTEO del mes. Nunca confiamos
   // únicamente en una marca local heredada. Si el total coincide, entra a delta
@@ -1885,8 +1891,9 @@ function setupCloudListeners({legacyOrders=false}={}){
 
   if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){}
   syncSignalUnsub=fsDB.collection(FB.sync).doc('state').onSnapshot({includeMetadataChanges:true},doc=>{
+    if(!doc.metadata.fromCache)finishOrdersServerReady('Firebase: EN VIVO · '+liveTime());
     if(doc.exists&&!doc.metadata.fromCache)processSyncSignal(stripWriteGuard(doc.data()||{}));
-  },err=>console.error('Sync signal listener',err));
+  },err=>{console.error('Sync signal listener',err);setCloudStatus('Firebase: '+firebaseErrorText(err),'error');setOrdersSourceState('error','Sin conexión a Firebase')});
 }
 
 async function initFirebase(){
@@ -1933,45 +1940,36 @@ async function initFirebase(){
     firebaseReady=true;
     try{await fsDB.enableNetwork()}catch(e){console.warn('enableNetwork',e)}
 
-    // Verificación real contra servidor + migración segura de la primera puesta en línea.
-    try{
-      await Promise.race([
-        bootstrapMissingCloudState(),
-        new Promise((_,reject)=>setTimeout(()=>reject(new Error('server-probe-timeout')),10000))
-      ]);
-      firebaseServerLive=true;
-      setCloudStatus('Firebase: conectado');
-    }catch(e){
-      console.warn('Firebase server/bootstrap probe',e);
-      firebaseServerLive=false;
-      setCloudStatus('Firebase: '+firebaseErrorText(e),'error');
-    }
+    // v87: los listeners reales son la prueba de conexión. Eliminamos el probe
+    // inicial bloqueante que podía dar falsos rojos en la red corporativa.
+    setupCloudListeners({legacyOrders:false});
 
-    // v86: los streams/seed confirman servidor con finishOrdersServerReady(); la validación mensual queda no bloqueante.
-    const schemaResult=await ensureActiveOrderSchema();
-    const legacyOrders=!!schemaResult?.error;
-    try{await discoverRecentOrderMonths();renderAll()}catch(e){console.warn('Month discovery',e)}
+    // Descubrimiento de meses: máximo unas pocas consultas limit(1), en segundo plano.
+    // Esto hace visibles Octubre/Noviembre aunque esa PC nunca los haya abierto.
+    setTimeout(()=>{
+      discoverRecentOrderMonths().then(()=>renderAll()).catch(e=>console.warn('Month discovery',e));
+    },400);
 
-    // Los listeners se mantienen incluso si el primer probe falla: cuando la red vuelva,
-    // Firestore reanudará el stream y la interfaz se pondrá al día automáticamente.
-    setupCloudListeners({legacyOrders});
+    // Validación de esquema no bloqueante; nunca cambia el estado operativo.
+    setTimeout(()=>ensureActiveOrderSchema().catch(e=>console.warn('Schema background',e)),900);
 
-    if(!firebaseServerLive){
-      setTimeout(async()=>{
-        try{
-          await fsDB.disableNetwork();
-          await new Promise(r=>setTimeout(r,350));
-          await fsDB.enableNetwork();
-        }catch(err){console.warn('Network retry',err)}
-      },2500);
-    }
+    // Si la red tarda, reintentamos transporte; la pantalla sigue bloqueada hasta
+    // que un stream real confirme servidor.
+    setTimeout(async()=>{
+      if(firebaseServerLive)return;
+      try{
+        await fsDB.disableNetwork();
+        await new Promise(r=>setTimeout(r,350));
+        await fsDB.enableNetwork();
+      }catch(err){console.warn('Network retry',err)}
+    },5000);
 
   }catch(err){
     console.error('Firebase init',err);
     firebaseReady=false;
     firebaseServerLive=false;
     setCloudStatus('Firebase: '+firebaseErrorText(err),'error');
-    setOrdersSourceState('local');
+    setOrdersSourceState('error','Sin conexión a Firebase');
     renderAll();
   }
 }
