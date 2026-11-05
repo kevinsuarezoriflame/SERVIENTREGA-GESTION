@@ -699,7 +699,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v92.20261105.1';
+const APP_BUILD='v93.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1871,6 +1871,60 @@ async function ensureOrdersMonthLoaded(month){
     return false;
   }
 }
+
+// v93: INFOBIP valida el mes de forma barata antes de usar la caché.
+// Solo descarga el mes completo cuando el conteo local no coincide con Firebase.
+async function ensureInfobipMonthReady(month){
+  month=String(month||'');
+  if(!month)return false;
+  const dateEl=$('iDate');
+  if(dateEl?.value&&!String(dateEl.value).startsWith(month+'-'))dateEl.value='';
+  if(!firebaseReady||!fsDB){
+    setCloudStatus('Firebase: sin conexión para INFOBIP','error');
+    return false;
+  }
+  try{
+    const check=await validateMonthCheap(month);
+    if(check.match){
+      knownOrderMonths.add(month);
+      loadedOrderMonths.add(month);
+      validatedOrderMonths.add(month);
+      confirmedSessionMonths.add(month);
+      saveLoadedMonthsState();
+      if(firebaseServerLive)setOrdersSourceState('server');
+      setCloudStatus(`Firebase: INFOBIP ${monthName(month)} validado`,'ok');
+      return true;
+    }
+    setCloudStatus(`Firebase: completando INFOBIP ${monthName(month)} (${check.local}/${check.server})...`,'saving');
+    const ok=await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false,includeInactiveFull:false});
+    if(ok){
+      knownOrderMonths.add(month);
+      loadedOrderMonths.add(month);
+      validatedOrderMonths.add(month);
+      confirmedSessionMonths.add(month);
+      saveLoadedMonthsState();
+      setCloudStatus(`Firebase: INFOBIP ${monthName(month)} sincronizado`,'ok');
+    }
+    return !!ok;
+  }catch(err){
+    console.warn('Validación INFOBIP',err);
+    // Si no hay ni un pedido local del mes, usamos la conexión principal para
+    // cargarlo una sola vez. Si ya hay datos, no forzamos una lectura masiva
+    // por un fallo temporal del conteo agregado.
+    if(localMonthCount(month)===0){
+      try{
+        const ok=await loadOrdersMonthOnce(month,{force:true,advanceWatermark:false,includeInactiveFull:false});
+        if(ok)setCloudStatus(`Firebase: INFOBIP ${monthName(month)} cargado`,'ok');
+        return !!ok;
+      }catch(loadErr){
+        console.error('Carga INFOBIP',loadErr);
+      }
+    }
+    setCloudStatus('Firebase: no se pudo validar INFOBIP','error');
+    return false;
+  }
+}
+
 async function startFullOrdersSeed({legacyOrders=false}={}){
   stopOrdersListener();ordersListenerMode='month-check';
   const month=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);
@@ -3051,7 +3105,7 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){const m=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)});ensureClaimFilterOptions()}else if(b.dataset.page==='infobip'){await ensureOrdersMonthLoaded($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');ensureMonthSelects();setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){const m=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)});ensureClaimFilterOptions()}else if(b.dataset.page==='infobip'){const ok=await ensureInfobipMonthReady($('iMonth')?.value);ensureInfoOwnerOptions();if(ok)renderInfo();else renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');ensureMonthSelects();setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
@@ -3237,7 +3291,7 @@ async function processFile(inputId,type,resultId){
 }
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
 // INFOBIP
-$('iMonth').addEventListener('change',async()=>{await ensureOrdersMonthLoaded($('iMonth').value);renderInfo()});
+$('iMonth').addEventListener('change',async()=>{const ok=await ensureInfobipMonthReady($('iMonth').value);if(ok)renderInfo();else renderInfo()});
 ['iDate','iOwner','iChannel'].forEach(id=>$(id).addEventListener('change',renderInfo));
 function selectedInfoRows(section){const ids=[...document.querySelectorAll(`.info-check[data-section="${section}"]:checked`)].map(x=>x.dataset.guia),type=section==='agency'?'Retiro agencia':'General 48–72h';return infoRows().filter(o=>o._msg.type===type&&ids.includes(o.guia))}
 function readyInfoChecks(section){return[...document.querySelectorAll(`.info-check[data-section="${section}"]:not(:disabled)`)]}
@@ -3488,7 +3542,7 @@ window.addEventListener('pagehide',()=>{try{cachePut('db',db)}catch(e){}});
 // anterior y provocar un rebote (v88 -> v85). La versión se actualiza únicamente al
 // recargar/abrir la página por decisión del usuario.
 async function checkPublishedBuild(){
-  const bs=$('buildStatus');if(bs)bs.textContent='v92';
+  const bs=$('buildStatus');if(bs)bs.textContent='v93';
 }
 
 // v88: sin auto-reload ni polling de versión.
