@@ -233,7 +233,7 @@ table{border-collapse:collapse;width:max-content;min-width:100%;font-size:10px}t
     <button data-page="pegar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span><span class="nav-label">Pegar bases</span></button>
     <button data-page="config"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h3M11 12h9M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></span><span class="nav-label">Configuración</span></button>
   </div>
-  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v87</span></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span><span id="cloudStatus">Firebase</span><br><span id="buildStatus" style="opacity:.75">v88</span></div>
 </aside>
 
 <main class="main">
@@ -679,7 +679,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v87.20261105.1';
+const APP_BUILD='v88.20261105.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -1302,18 +1302,8 @@ function handleWriteError(err,context='cambio'){
   console.error(context,err);
   firebaseServerLive=false;
   if(isPermissionDenied(err)){
-    setCloudStatus('Versión desactualizada · recargando...','error');
-    toast('Esta versión ya no puede modificar. Actualizando...');
-    const tried=sessionStorage.getItem('servi_version_reload_tried');
-    if(!tried){
-      sessionStorage.setItem('servi_version_reload_tried','1');
-      setTimeout(()=>{
-        const base=location.origin+location.pathname;
-        location.replace(base+'?_refresh='+Date.now());
-      },700);
-    }else{
-      toast('Recarga la página para obtener la versión vigente');
-    }
+    setCloudStatus('Firebase: permiso denegado','error');
+    toast('Firebase rechazó la escritura. La página NO se recargará automáticamente.');
     return true;
   }
   return false;
@@ -2874,7 +2864,15 @@ const DASH_PALETTE=['#00A651','#63C995','#4D8DCC','#F0B44D','#846FC7','#4FA9A3',
 function timeChartColor(label){const s=N(label);if(s.includes('NO ENTREGADO'))return'#7E8F88';if(s.includes('MENOS DE 24')||s.includes('<24'))return'#00A651';if(s.includes('24H'))return'#63C995';if(s.includes('48H'))return'#4D8DCC';if(s.includes('72H')&&!s.includes('MAS'))return'#F0B44D';if(s.includes('MAS DE 72')||s.includes('>72'))return'#C85F66';return'#6FAFA3'}
 function setChartPlaceholder(wrapId,msg){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<div class="chart-placeholder">${escapeHtml(msg||'Sin datos')}</div>`}
 function restoreChartCanvas(wrapId,canvasId,extraClass=''){const wrap=$(wrapId);if(!wrap)return;wrap.innerHTML=`<canvas id="${canvasId}"></canvas>`;if(extraClass)wrap.className='canvas-wrap '+extraClass;else wrap.className='canvas-wrap'}
-function renderDashboard(){const m=$('dMonth').value,closed=!!db.snapshots[m];$('monthStatus').textContent=closed?'MES CERRADO':'MES ABIERTO';$('closeMonth').disabled=!m||closed;const agg=dashboardData();const inferredPending=(agg.porTiempo?.['No entregado']||agg.porTiempo?.['NO ENTREGADO']||0),realDelivered=agg.entregadosReales??Math.max(0,(agg.total||0)-inferredPending),pending=Math.max(0,(agg.total||0)-realDelivered),dp=agg.total?realDelivered*100/agg.total:0,pp=agg.total?pending*100/agg.total:0;$('sumTotal').textContent=agg.total||0;$('sumDelivered').textContent=realDelivered;$('sumPending').textContent=pending;$('sumDeliveredPct').textContent=`${dp.toFixed(1)}% del total`;$('sumPendingPct').textContent=`${pp.toFixed(1)}% del total`;$('sumEffectiveness').textContent=agg.total?`${dp.toFixed(1)}%`:'0%';$('kpiHD').textContent=agg.porCanal.HD||0;$('kpiPUP').textContent=agg.porCanal.PUP||0;$('kpiSPO').textContent=agg.porCanal.SPO||0;renderProvincePanel(agg);const arrT=Object.keys(agg.porTiempo).map(k=>({k,v:agg.porTiempo[k],p:agg.total?agg.porTiempo[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartTiempo){chartTiempo.destroy();chartTiempo=null}if(arrT.length){restoreChartCanvas('wrapGraficoTiempo','graficoTiempo');chartTiempo=new Chart($('graficoTiempo').getContext('2d'),{type:'bar',data:{labels:arrT.map(x=>x.k),datasets:[{data:arrT.map(x=>x.v),borderWidth:1,backgroundColor:arrT.map(x=>timeChartColor(x.k)),borderColor:arrT.map(x=>timeChartColor(x.k))}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:28}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#213',offset:-4,clamp:true,clip:false,formatter:v=>v}},scales:{x:{beginAtZero:true}}}});$('pngTiempo').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoTiempo','Sin datos');$('pngTiempo').style.display='none'}let htmlT='<div class="tabla-datos"><table><thead><tr><th>Tiempo de Entrega</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumT=0;for(const o of arrT){const p=Math.round(o.p*10)/10;sumT+=o.p;htmlT+=`<tr><td>${escapeHtml(o.k)}</td><td>${o.v}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlT+='</tbody></table></div>';$('tablaTiempo').innerHTML=arrT.length?htmlT:'<div class="empty">Sin datos</div>';$('totalTiempo').textContent=arrT.length?`Total: ${Math.round(sumT*10)/10}%`:'';const tc=Object.keys(agg.porClaim).map(k=>({claim:k,cant:agg.porClaim[k],p:agg.total?agg.porClaim[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartClaims){chartClaims.destroy();chartClaims=null}if(tc.length){restoreChartCanvas('wrapGraficoClaims','graficoClaims','claims');chartClaims=new Chart($('graficoClaims').getContext('2d'),{type:'bar',data:{labels:tc.map(x=>x.claim),datasets:[{data:tc.map(x=>x.cant),borderWidth:1,backgroundColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length]),borderColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length])}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});$('pngClaims').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoClaims','Sin datos');$('pngClaims').style.display='none'}let htmlC='<div class="tabla-datos"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumC=0;for(const r of tc){const p=Math.round(r.p*10)/10;sumC+=r.p;htmlC+=`<tr><td>${escapeHtml(r.claim)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlC+='</tbody></table></div>';$('tablaClaims').innerHTML=tc.length?htmlC:'<div class="empty">Sin datos</div>';$('totalClaims').textContent=tc.length?`Total: ${Math.round(sumC*10)/10}%`:'';$('valorEfectividad').textContent=agg.efectividad==null?'-':agg.efectividad.toFixed(1)+'%';$('valorEfectividadTiempo').textContent=agg.efectividadTiempo==null?'-':agg.efectividadTiempo.toFixed(1)+'%'}
+function renderDashboard(){const m=$('dMonth').value,closed=!!db.snapshots[m];
+  if(m&&!closed&&localMonthCount(m)===0&&!validatedOrderMonths.has(m)){
+    $('sumTotal').textContent='…';$('sumDelivered').textContent='…';$('sumPending').textContent='…';$('sumEffectiveness').textContent='…';
+    $('sumDeliveredPct').textContent='Cargando '+monthName(m)+'…';$('sumPendingPct').textContent='';
+    $('kpiHD').textContent='…';$('kpiPUP').textContent='…';$('kpiSPO').textContent='…';
+    if(firebaseReady&&!monthLoadPromises.has(m)){ensureOrdersMonthLoaded(m).then(()=>renderDashboard()).catch(err=>console.warn('Dashboard month load',err));}
+    return;
+  }
+$('monthStatus').textContent=closed?'MES CERRADO':'MES ABIERTO';$('closeMonth').disabled=!m||closed;const agg=dashboardData();const inferredPending=(agg.porTiempo?.['No entregado']||agg.porTiempo?.['NO ENTREGADO']||0),realDelivered=agg.entregadosReales??Math.max(0,(agg.total||0)-inferredPending),pending=Math.max(0,(agg.total||0)-realDelivered),dp=agg.total?realDelivered*100/agg.total:0,pp=agg.total?pending*100/agg.total:0;$('sumTotal').textContent=agg.total||0;$('sumDelivered').textContent=realDelivered;$('sumPending').textContent=pending;$('sumDeliveredPct').textContent=`${dp.toFixed(1)}% del total`;$('sumPendingPct').textContent=`${pp.toFixed(1)}% del total`;$('sumEffectiveness').textContent=agg.total?`${dp.toFixed(1)}%`:'0%';$('kpiHD').textContent=agg.porCanal.HD||0;$('kpiPUP').textContent=agg.porCanal.PUP||0;$('kpiSPO').textContent=agg.porCanal.SPO||0;renderProvincePanel(agg);const arrT=Object.keys(agg.porTiempo).map(k=>({k,v:agg.porTiempo[k],p:agg.total?agg.porTiempo[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartTiempo){chartTiempo.destroy();chartTiempo=null}if(arrT.length){restoreChartCanvas('wrapGraficoTiempo','graficoTiempo');chartTiempo=new Chart($('graficoTiempo').getContext('2d'),{type:'bar',data:{labels:arrT.map(x=>x.k),datasets:[{data:arrT.map(x=>x.v),borderWidth:1,backgroundColor:arrT.map(x=>timeChartColor(x.k)),borderColor:arrT.map(x=>timeChartColor(x.k))}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,layout:{padding:{right:28}},plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#213',offset:-4,clamp:true,clip:false,formatter:v=>v}},scales:{x:{beginAtZero:true}}}});$('pngTiempo').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoTiempo','Sin datos');$('pngTiempo').style.display='none'}let htmlT='<div class="tabla-datos"><table><thead><tr><th>Tiempo de Entrega</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumT=0;for(const o of arrT){const p=Math.round(o.p*10)/10;sumT+=o.p;htmlT+=`<tr><td>${escapeHtml(o.k)}</td><td>${o.v}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlT+='</tbody></table></div>';$('tablaTiempo').innerHTML=arrT.length?htmlT:'<div class="empty">Sin datos</div>';$('totalTiempo').textContent=arrT.length?`Total: ${Math.round(sumT*10)/10}%`:'';const tc=Object.keys(agg.porClaim).map(k=>({claim:k,cant:agg.porClaim[k],p:agg.total?agg.porClaim[k]*100/agg.total:0})).sort((a,b)=>b.p-a.p);if(chartClaims){chartClaims.destroy();chartClaims=null}if(tc.length){restoreChartCanvas('wrapGraficoClaims','graficoClaims','claims');chartClaims=new Chart($('graficoClaims').getContext('2d'),{type:'bar',data:{labels:tc.map(x=>x.claim),datasets:[{data:tc.map(x=>x.cant),borderWidth:1,backgroundColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length]),borderColor:tc.map((x,i)=>DASH_PALETTE[i%DASH_PALETTE.length])}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});$('pngClaims').style.display='inline-block'}else{setChartPlaceholder('wrapGraficoClaims','Sin datos');$('pngClaims').style.display='none'}let htmlC='<div class="tabla-datos"><table><thead><tr><th>Clasificación</th><th>Cantidad</th><th>%</th></tr></thead><tbody>',sumC=0;for(const r of tc){const p=Math.round(r.p*10)/10;sumC+=r.p;htmlC+=`<tr><td>${escapeHtml(r.claim)}</td><td>${r.cant}</td><td class="celda-barra"><div class="barra-contenedor"><div class="barra-progreso" style="width:${Math.min(100,p)}%"></div><div class="barra-label">${p}%</div></div></td></tr>`}htmlC+='</tbody></table></div>';$('tablaClaims').innerHTML=tc.length?htmlC:'<div class="empty">Sin datos</div>';$('totalClaims').textContent=tc.length?`Total: ${Math.round(sumC*10)/10}%`:'';$('valorEfectividad').textContent=agg.efectividad==null?'-':agg.efectividad.toFixed(1)+'%';$('valorEfectividadTiempo').textContent=agg.efectividadTiempo==null?'-':agg.efectividadTiempo.toFixed(1)+'%'}
 function renderConfig(){const active=db.owners.filter(o=>o.active);$('iOwner').innerHTML='<option value="">Todos</option>'+active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('newZoneOwner').innerHTML=active.map(o=>`<option>${escapeHtml(o.name)}</option>`).join('');$('ownersList').innerHTML=db.owners.map((o,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><input data-owner-name="${i}" value="${escapeHtml(o.name)}"><input data-owner-phone="${i}" value="${escapeHtml(o.phone||'')}"><div class="owner-actions"><button class="btn owner-replace" data-owner-replace="${i}">♻ Reemplazar</button><button class="btn" data-owner-toggle="${i}">${o.active?'Desactivar':'Activar'}</button></div></div>`).join('');$('claimsList').innerHTML=db.claims.map((c,i)=>`<div class="listrow"><input data-claim-name="${i}" value="${escapeHtml(c.name)}"><input data-claim-desc="${i}" value="${escapeHtml(c.desc||'')}"><button class="btn btn-danger" data-claim-del="${i}">Eliminar</button></div>`).join('');$('zonesList').innerHTML=db.zones.map((z,i)=>`<div class="listrow"><input data-zone-name="${i}" value="${escapeHtml(z.zone)}"><select data-zone-owner="${i}">${active.map(o=>`<option ${o.name===z.owner?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select><button class="btn btn-danger" data-zone-del="${i}">Eliminar</button></div>`).join('');const hs=[...(db.settings?.holidays||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)));$('holidaysList').innerHTML=hs.length?hs.map((h,i)=>`<div class="listrow" style="grid-template-columns:1fr 1fr auto"><strong>${escapeHtml(displayDate(h.date))}</strong><span>-${Number(h.days||0)} día/s</span><button class="btn btn-danger" data-holiday-del="${escapeHtml(h.date)}">Eliminar</button></div>`).join(''):'<div class="empty">Sin feriados configurados</div>';$('pupDaysConfig').value=Number(db.settings?.pupDays??1);renderContacts();$('pClaim').innerHTML='<option value="">Todos</option>'+db.claims.map(c=>`<option>${escapeHtml(c.name)}</option>`).join('');renderSyncTestPanel()}
 function renderContacts(){const q=N($('contactSearch').value),rows=Object.entries(db.contacts).filter(([s,c])=>!q||N(s+' '+c.phone).includes(q)).sort((a,b)=>String(b[1].updated||'').localeCompare(String(a[1].updated||'')));$('contactsList').innerHTML=rows.length?rows.map(([s,c])=>`<div class="listrow"><input value="${escapeHtml(s)}" disabled><input data-contact-phone="${escapeHtml(s)}" value="${escapeHtml(c.phone||'')}"><span style="font-size:10px;color:#697772">${escapeHtml(c.updated||'')} · ${escapeHtml(c.source||'')}</span></div>`).join(''):'<div class="empty">Sin contactos</div>'}
 function renderAll(){
@@ -3398,47 +3396,19 @@ $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none
 
 updateBulkClaimUI();
 window.addEventListener('pagehide',()=>{try{cachePut('db',db)}catch(e){}});
-let buildCheckRunning=false;
+// v88: estabilidad primero. Nunca recargar automáticamente por una versión detectada
+// en GitHub: durante el despliegue GitHub Pages puede servir temporalmente una versión
+// anterior y provocar un rebote (v88 -> v85). La versión se actualiza únicamente al
+// recargar/abrir la página por decisión del usuario.
 async function checkPublishedBuild(){
-  if(buildCheckRunning||(location.protocol!=='http:'&&location.protocol!=='https:'))return;
-  buildCheckRunning=true;
-  try{
-    const base=location.origin+location.pathname;
-    const sep=base.includes('?')?'&':'?';
-    const r=await fetch(base+sep+'_buildcheck='+Date.now(),{
-      cache:'no-store',
-      headers:{'Cache-Control':'no-cache','Pragma':'no-cache'}
-    });
-    if(!r.ok)return;
-    const txt=await r.text();
-    const m=txt.match(/const APP_BUILD='([^']+)'/);
-    if(m&&m[1]&&m[1]!==APP_BUILD){
-      const bs=$('buildStatus');if(bs)bs.textContent=m[1];
-      setCloudStatus('Nueva versión detectada...');
-      toast('Nueva versión publicada. Actualizando...');
-      setTimeout(()=>{
-        location.replace(base+'?_v='+encodeURIComponent(m[1])+'&_nocache='+Date.now());
-      },250);
-    }else{
-      const bs=$('buildStatus');if(bs)bs.textContent='v85';
-    }
-  }catch(e){
-    console.warn('Build check',e);
-  }finally{
-    buildCheckRunning=false;
-  }
+  const bs=$('buildStatus');if(bs)bs.textContent='v88';
 }
 
-// Revisar versión publicada; esto consulta GitHub, no Firestore.
-setTimeout(checkPublishedBuild,650);
-setInterval(checkPublishedBuild,10000);
-
+// v88: sin auto-reload ni polling de versión.
+checkPublishedBuild();
 renderAll();
-window.addEventListener('pageshow',()=>{checkPublishedBuild()});
-window.addEventListener('online',()=>{setCloudStatus('Firebase: reconectando...','saving');try{fsDB?.enableNetwork?.()}catch(e){};if(!fsDB)initFirebase();checkPublishedBuild()});
+window.addEventListener('online',()=>{setCloudStatus('Firebase: reconectando...','saving');try{fsDB?.enableNetwork?.()}catch(e){};if(!fsDB)initFirebase()});
 window.addEventListener('offline',()=>{firebaseServerLive=false;setCloudStatus('Firebase: sin internet','error')});
-window.addEventListener('focus',()=>{checkPublishedBuild()});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){checkPublishedBuild()}});
 initFirebase();
 </script>
 </body>
