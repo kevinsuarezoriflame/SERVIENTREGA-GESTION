@@ -685,6 +685,7 @@ let bulkClaimMode=false,bulkClaimSelected=new Set(),provinceMapToken=0,ecuadorGe
 let ordersVisibleLimit=ROW_BATCH_SIZE,lastOrdersFilterSignature='',ordersFilterTimer=null,ordersLastTotal=0;
 let cacheDBPromise=null,cacheSaveTimer=null,cacheHydrated=false,memorySafetyBackup=null;
 let ordersUnsub=null,ordersListenerMode='',ordersWatermark=0;
+let configUnsub=null;
 let liveEventUnsub=null,bulkManifestUnsub=null,liveEventWatermark=0,bulkManifestWatermark=0;
 let bulkApplyQueue=Promise.resolve();
 let knownOrderMonths=new Set(),loadedOrderMonths=new Set(),validatedOrderMonths=new Set(),monthLoadPromises=new Map();
@@ -699,7 +700,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"566693500762",
   appId:"1:566693500762:web:07644208d73ff371770563"
 };
-const APP_BUILD='v93.20261105.1';
+const APP_BUILD='v95.20261106.1';
 const WRITE_GATE='SERVI_V33';
 const FB={
   config:'servientrega_configuracion',
@@ -805,7 +806,7 @@ function scheduleCacheSave(){
       try{localStorage.setItem(STORAGE_META_KEY,JSON.stringify({_updatedAt:Number(db._updatedAt||Date.now()),orders:Object.keys(db.orders||{}).length,build:APP_BUILD}))}catch(e){}
       try{localStorage.removeItem(STORAGE_KEY)}catch(e){}
     }
-  },350);
+  },650);
 }
 function localCache(){scheduleCacheSave()}
 
@@ -1173,9 +1174,10 @@ async function applyBulkManifest(manifest){
         const guia=String(item.guide||'');if(!guia)continue;
         if(item.deleted){if(db.orders[guia]){delete db.orders[guia];delete cloudFP.orders[guia];changed=true;applied++}continue}
         const d=stripWriteGuard(item.payload||{});if(!shouldApplyStreamOrder(d,guia))continue;
-        const prev=db.orders[guia];db.orders[guia]=d;cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,d));
-        const mk=monthKey(d.fechaGuia);if(mk)knownOrderMonths.add(mk);
-        if(!prev||stableJSON(prev)!==stableJSON(d)){changed=true;applied++}
+        const prevFP=cloudFP.orders[guia]||'',nextFP=stableJSON(mapPayload('orders',guia,d));
+        db.orders[guia]=d;cloudFP.orders[guia]=nextFP;
+        const mk=orderMonthKey(d);if(mk)knownOrderMonths.add(mk);
+        if(prevFP!==nextFP){changed=true;applied++}
       }
     }
     if(Number(manifest.maxSyncAt||0)>0)writeOrdersWatermark(Number(manifest.maxSyncAt));
@@ -1196,9 +1198,10 @@ function startLiveEventListener(){
       const guia=String(ev.guide||'');if(!guia)continue;
       if(ev.deleted){if(db.orders[guia]){delete db.orders[guia];delete cloudFP.orders[guia];changed=true}continue}
       const d=stripWriteGuard(ev.payload||{});if(!shouldApplyStreamOrder(d,guia))continue;
-      const prev=db.orders[guia];db.orders[guia]=d;cloudFP.orders[guia]=stableJSON(mapPayload('orders',guia,d));
-      const mk=monthKey(d.fechaGuia);if(mk)knownOrderMonths.add(mk);
-      if(!prev||stableJSON(prev)!==stableJSON(d))changed=true;
+      const prevFP=cloudFP.orders[guia]||'',nextFP=stableJSON(mapPayload('orders',guia,d));
+      db.orders[guia]=d;cloudFP.orders[guia]=nextFP;
+      const mk=orderMonthKey(d);if(mk)knownOrderMonths.add(mk);
+      if(prevFP!==nextFP)changed=true;
     }
     if(maxAt>currentWm)writeLiveEventWatermark(maxAt);if(changed){localCache();scheduleCloudRender()}
     finishOrdersServerReady();
@@ -1731,7 +1734,7 @@ async function aggregateMonthCount(month){
 function localMonthCount(month){
   let n=0;
   for(const o of Object.values(db.orders||{})){
-    if(monthKey(o.fechaGuia)!==month)continue;
+    if(orderMonthKey(o)!==month)continue;
     if(o?._deleted===true||o?._active===false)continue;
     n++;
   }
@@ -1883,6 +1886,14 @@ async function ensureInfobipMonthReady(month){
     setCloudStatus('Firebase: sin conexión para INFOBIP','error');
     return false;
   }
+  // v94: si el mes ya fue confirmado en esta sesión y tiene datos locales,
+  // los streams livianos mantienen la caché al día. No repetimos count() al
+  // volver a INFOBIP ni al cambiar filtros.
+  if(confirmedSessionMonths.has(month)&&localMonthCount(month)>0){
+    if(firebaseServerLive)setOrdersSourceState('server');
+    setCloudStatus(`Firebase: INFOBIP ${monthName(month)} listo`,'ok');
+    return true;
+  }
   try{
     const check=await validateMonthCheap(month);
     if(check.match){
@@ -1983,7 +1994,8 @@ async function reconcileCurrentMonthForBuild(){
 function setupCloudListeners({legacyOrders=false}={}){
   if(listenersStarted||!fsDB)return;listenersStarted=true;
 
-  fsDB.collection(FB.config).doc('principal').onSnapshot({includeMetadataChanges:true},doc=>{
+  if(configUnsub)try{configUnsub()}catch(e){}
+  configUnsub=fsDB.collection(FB.config).doc('principal').onSnapshot({includeMetadataChanges:true},doc=>{
     if(!doc.metadata.fromCache)finishOrdersServerReady('Firebase: EN VIVO · '+liveTime());
     if(!doc.exists)return;
     const d=stripWriteGuard(doc.data()||{});if(d._deleted)return;
@@ -2005,6 +2017,7 @@ function setupCloudListeners({legacyOrders=false}={}){
 }
 
 async function initFirebase(){
+  if(staleBuildLocked)return;
   try{
     setOrdersSourceState('loading');
     scheduleOrdersLocalFallback();
@@ -2175,6 +2188,20 @@ function deliveryDaysForOrder(o){if(!o||!isDelivered(o))return null;const fd=eff
 function hasCompleteDeliveredData(o){return!!(o&&isDelivered(o)&&o.fechaEntrega&&deliveryDaysForOrder(o)!==null)}
 function displayDate(v){const d=parseAnyDate(v);return d?`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`:''}
 function monthKey(v){const d=parseAnyDate(v);return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:''}
+const orderMonthMemo=new WeakMap();
+const orderSearchMemo=new WeakMap();
+function orderMonthKey(o){
+  if(!o||typeof o!=='object')return monthKey(o?.fechaGuia||'');
+  const v=String(o.fechaGuia||''),hit=orderMonthMemo.get(o);
+  if(hit&&hit.v===v)return hit.k;
+  const k=monthKey(v);orderMonthMemo.set(o,{v,k});return k;
+}
+function orderSearchText(o){
+  if(!o||typeof o!=='object')return'';
+  const raw=[o.guia,o.socio,o.nombreSocio,o.destinatarioOrigen,o.destinatario,o.ciudad,o.status,o.referencia].join(' ');
+  const hit=orderSearchMemo.get(o);if(hit&&hit.raw===raw)return hit.text;
+  const text=N(raw);orderSearchMemo.set(o,{raw,text});return text;
+}
 function monthName(k){if(!k)return'Sin mes';const[y,m]=k.split('-');const names=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];return`${names[+m-1]} ${y}`}
 function channel(code){const s=String(code??'').trim(),n=Number(s);if((n>=500&&n<=599)||(n>=5000&&n<=5999))return'PUP';if(n>=600&&n<=799)return'SPO';if(s.length>=5)return'HD';return''}
 function isDeliveredStatus(status){const s=N(status);return s.startsWith('CERTIFICACION DE PRUEBA DE ENTREGA')||s.startsWith('ENTREGA DIGITALIZADA')||/ENTREGAD/.test(s)||/ENTREGA (EXITOSA|EFECTIVA|REALIZADA|CONFIRMADA|COMPLETADA|FINALIZADA)/.test(s)||/RECIBIDO POR (CLIENTE|DESTINATARIO)/.test(s)}
@@ -2536,11 +2563,36 @@ async function syncServiBulkNow(result){
   }
 }
 
+function tcCourierValue(r){return N(getObjValue(r,['COURIER','COURIER_NAME','NOMBRE COURIER','TRANSPORTISTA']))}
+function tcRowsForServientrega(rows){
+  return (rows||[]).filter(r=>{const courier=tcCourierValue(r);return !courier||courier.includes('SERVIENTREGA')});
+}
+async function prepareTcOrdersFromFirebase(rows){
+  // El TC no depende de que la PC haya abierto primero Noviembre.
+  // Recuperamos únicamente las guías TC que faltan localmente; no descargamos el mes completo.
+  const serviRows=tcRowsForServientrega(rows);
+  const guides=[...new Set(serviRows.map(r=>String(getObjValue(r,['WAYBILL_NUMBER','GUIA','NO GUIA','NO_GUIA'])).trim()).filter(Boolean))];
+  const missing=guides.filter(g=>!db.orders[g]);
+  if(!firebaseReady||!fsDB||!missing.length)return {rows:serviRows,loaded:0,requested:missing.length,omitted:(rows||[]).length-serviRows.length};
+  setCloudStatus(`Firebase: cruzando TC (${missing.length} guías)...`,'saving');
+  const cloud=await getCloudDocsByKeys(FB.orders,missing,'guia');
+  let loaded=0;
+  for(const [g,d0] of Object.entries(cloud)){
+    const d=stripWriteGuard(d0||{});
+    if(d._deleted===true||d._active===false)continue;
+    db.orders[g]=d;cloudFP.orders[g]=stableJSON(mapPayload('orders',g,d));
+    const mk=orderMonthKey(d);if(mk)knownOrderMonths.add(mk);
+    loaded++;
+  }
+  if(loaded)localCache();
+  return {rows:serviRows,loaded,requested:missing.length,omitted:(rows||[]).length-serviRows.length};
+}
+
 function processTcRows(rows){
-  let guideMatches=0,unchanged=0,masterAdded=0,masterUpdated=0,serviRows=0,stored=0,recovered=0;
+  let guideMatches=0,unchanged=0,masterAdded=0,masterUpdated=0,serviRows=0,nonServi=0,stored=0,recovered=0;
   const touchedSocios=new Set(),sourceGuides=new Set(),changedGuides=new Set(),guidePhoneGuides=new Set();
   for(const r of rows){
-    const courier=N(getObjValue(r,['COURIER']));if(courier&&courier.includes('SERVIENTREGA'))serviRows++;
+    const courier=tcCourierValue(r);if(courier&&!courier.includes('SERVIENTREGA')){nonServi++;continue}if(courier.includes('SERVIENTREGA'))serviRows++;
     const guia=String(getObjValue(r,['WAYBILL_NUMBER','GUIA','NO GUIA','NO_GUIA'])).trim(),
           socio=String(getObjValue(r,['SOCIO','CODIGO11','CODIGO SOCIO','CODIGO_SOCIO','COD SOCIO'])).trim(),
           nombre=String(getObjValue(r,['NOMBRE_SOCIO','NOMBRE SOCIO','NOMBRE12','SOCIO_NOMBRE','NOMBRE DEL SOCIO'])).trim(),
@@ -2564,7 +2616,7 @@ function processTcRows(rows){
   }
   for(const o of Object.values(db.orders)){const before=o.celular;if(o.socio&&touchedSocios.has(o.socio)&&db.contacts[o.socio]?.phone)o.celular=db.contacts[o.socio].phone;if(!before&&o.celular){rememberGuidePhone(o.guia,o.celular,'TC');guidePhoneGuides.add(o.guia);o._syncClient=CLIENT_ID;o._syncAt=Date.now();changedGuides.add(o.guia);recovered++}}
   localCache();
-  return{guideMatches,unchanged,masterAdded,masterUpdated,recovered,serviRows,stored,changedGuides:[...changedGuides],sourceGuides:[...sourceGuides],contactSocios:[...touchedSocios],guidePhoneGuides:[...guidePhoneGuides]};
+  return{guideMatches,unchanged,masterAdded,masterUpdated,recovered,serviRows,nonServi,stored,changedGuides:[...changedGuides],sourceGuides:[...sourceGuides],contactSocios:[...touchedSocios],guidePhoneGuides:[...guidePhoneGuides]};
 }
 
 function socioDataForGuide(o){
@@ -2751,7 +2803,8 @@ async function applyBulkClaim(){
 
 function orderRows(){
   const m=$('pMonth').value,d=$('pDate').value,pv=$('pProvince').value,c=$('pChannel').value,s=$('pStatus').value,ss=$('pServiStatus').value,cl=$('pClaim').value,q=N($('pSearch').value);
-  let rows=Object.values(db.orders).filter(o=>(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!pv||N(o.provincia||'')===N(pv))&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||N(o.status||'').includes(N(ss)))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||N([o.guia,o.socio,o.nombreSocio,o.destinatarioOrigen,o.destinatario,o.ciudad,o.status,o.referencia].join(' ')).includes(q)));
+  const pvN=N(pv),ssN=N(ss);
+  let rows=Object.values(db.orders).filter(o=>(!m||orderMonthKey(o)===m)&&(!d||o.fechaGuia===d)&&(!pv||N(o.provincia||'')===pvN)&&(!c||o.canal===c)&&(!s||(s==='delivered'?isDelivered(o):!isDelivered(o)))&&(!ss||N(o.status||'').includes(ssN))&&(!cl||o.clasificacion===cl)&&(activeOwner==='TODOS'||(activeOwner==='SIN ASIGNACIÓN'?!String(o.responsable||'').trim():o.responsable===activeOwner))&&(!q||orderSearchText(o).includes(q)));
   if(daysSort){
     // Rendimiento: DÍAS se calcula una sola vez por pedido, no en cada comparación del sort.
     const ranked=rows.map(o=>({o,d:deliveryDaysForOrder(o)}));
@@ -2787,7 +2840,7 @@ function renderOrders(resetLimit=false,skipOwnerTabs=false){
 }
 function startsIngresandoAgencia(status){return N(status).startsWith('INGRESANDO EN AGENCIA')}
 function infoMessage(o){const resp=ownerPhone(o.responsable);if(!o.socio)return{type:'Sin socio',ready:false,line:''};if(!o.celular)return{type:'Sin celular',ready:false,line:''};if(!resp)return{type:'Sin WhatsApp responsable',ready:false,line:''};if(startsIngresandoAgencia(o.status))return{type:'Retiro agencia',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} esta en agencia ${o.status} favor retirar,Whatsapp${resp}`};return{type:'General 48–72h',ready:true,line:`Oriflame socio ${o.socio} su guia ${o.guia} llegara en 48a72h estar pendiente Whatsapp${resp}`}}
-function infoRows(){const m=$('iMonth').value,d=$('iDate').value,own=$('iOwner').value,c=$('iChannel').value;return Object.values(db.orders).filter(o=>!isDelivered(o)&&['PUP','HD'].includes(o.canal)&&(!m||monthKey(o.fechaGuia)===m)&&(!d||o.fechaGuia===d)&&(!own||o.responsable===own)&&(!c||o.canal===c)).map(o=>({...o,_msg:infoMessage(o)}))}
+function infoRows(){const m=$('iMonth').value,d=$('iDate').value,own=$('iOwner').value,c=$('iChannel').value;return Object.values(db.orders).filter(o=>!isDelivered(o)&&(o.canal==='PUP'||o.canal==='HD')&&(!m||orderMonthKey(o)===m)&&(!d||o.fechaGuia===d)&&(!own||o.responsable===own)&&(!c||o.canal===c)).map(o=>({...o,_msg:infoMessage(o)}))}
 function infoTableHtml(rows,section){return `<thead><tr><th>✓</th><th>GUIA</th><th>FECHA GUIA</th><th>SOCIO</th><th>CANAL</th><th>RESPONSABLE</th><th>STATUS</th><th>CELULAR</th><th>LÍNEA INFOBIP</th></tr></thead><tbody>${rows.map(o=>`<tr><td><input type="checkbox" class="info-check" data-section="${section}" data-guia="${o.guia}" ${o._msg.ready?'':'disabled'}></td><td>${escapeHtml(o.guia)}</td><td>${escapeHtml(displayDate(o.fechaGuia))}</td><td>${escapeHtml(o.socio||'')}</td><td>${escapeHtml(o.canal)}</td><td>${escapeHtml(o.responsable||'')}</td><td><span class="badge ${statusBadge(o)}">${escapeHtml(o.status||'Pendiente')}</span></td><td>${escapeHtml(o.celular||'')}</td><td>${escapeHtml(o._msg.line||'')}</td></tr>`).join('')}</tbody>`}
 function renderInfo(){const rows=infoRows(),agency=rows.filter(o=>o._msg.type==='Retiro agencia'),general=rows.filter(o=>o._msg.type!=='Retiro agencia');$('iPending').textContent=rows.length;$('iReady').textContent=rows.filter(o=>o._msg.ready).length;$('iPickup').textContent=agency.filter(o=>o._msg.ready).length;$('iGeneral').textContent=general.filter(o=>o._msg.ready).length;$('iMissing').textContent=rows.filter(o=>!o._msg.ready).length;$('infoAgencyTable').innerHTML=agency.length?infoTableHtml(agency,'agency'):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>';$('infoGeneralTable').innerHTML=general.length?infoTableHtml(general,'general'):'<tbody><tr><td style="padding:18px;color:#697772">Sin pedidos</td></tr></tbody>'}
 function computeAgg(rows){const porProvincia={},porTiempo={},porClaim={},porCanal={HD:0,PUP:0,SPO:0},porFechaGuia={};let total=rows.length,entregados=0;for(const o of rows){const fg=isoDate(o.fechaGuia);if(fg)porFechaGuia[fg]=(porFechaGuia[fg]||0)+1;const prov=canonProv(o.provincia||o.ciudad);porProvincia[prov]=(porProvincia[prov]||0)+1;const t=deliveryTime(o);if(t)porTiempo[t]=(porTiempo[t]||0)+1;if(o.clasificacion)porClaim[o.clasificacion]=(porClaim[o.clasificacion]||0)+1;if(Object.prototype.hasOwnProperty.call(porCanal,o.canal))porCanal[o.canal]++;const noPorTiempo=N(t).includes('NO ENTREGADO')||t==='No entregado';const noServi=N(o.clasificacion).includes('NOVEDAD COURIER');if(!(noPorTiempo||noServi))entregados++}const okTiempo=(porTiempo['24hrs']||0)+(porTiempo['48hrs']||0)+(porTiempo['Menos de 24hrs']||0);const noTiempo=(porTiempo['72hrs']||0)+(porTiempo['Más de 72hrs']||0)+(porTiempo['No entregado']||porTiempo['NO ENTREGADO']||0);const totTiempo=okTiempo+noTiempo;const entregadosReales=rows.filter(o=>isDelivered(o)).length;return{porProvincia,porTiempo,porClaim,porCanal,porFechaGuia,total,entregados,entregadosReales,efectividad:total?entregados*100/total:null,efectividadTiempo:totTiempo?okTiempo*100/totTiempo:null}}
@@ -3105,7 +3158,7 @@ $('sidebarToggle').addEventListener('click',()=>setSidebarCollapsed(!$('appRoot'
 setSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1');
 window.addEventListener('resize',()=>{if($('pedidos')?.classList.contains('active'))syncOrdersHScroll()});
 // Navegación
-document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){const m=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)});ensureClaimFilterOptions()}else if(b.dataset.page==='infobip'){const ok=await ensureInfobipMonthReady($('iMonth')?.value);ensureInfoOwnerOptions();if(ok)renderInfo();else renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');ensureMonthSelects();setTimeout(renderDashboard,20)}}));
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',async()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');if(b.dataset.page==='pedidos'){const m=$('pMonth')?.value||openMonths()[0]||calendarMonth(0);await switchOrdersMonth(m,{forceServer:!confirmedSessionMonths.has(m)});ensureClaimFilterOptions()}else if(b.dataset.page==='infobip'){await ensureInfobipMonthReady($('iMonth')?.value);ensureInfoOwnerOptions();renderInfo()}else if(b.dataset.page==='config'){renderConfig()}else if(b.dataset.page==='dashboard'){await loadAuxCollectionOnce('snapshots');ensureMonthSelects();setTimeout(renderDashboard,20)}}));
 document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-paste]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['normal','servi','tc'].forEach(k=>$('paste-'+k).style.display=b.dataset.paste===k?'block':'none')}));
 // Pedidos
 $('ownerTabs').addEventListener('click',e=>{const b=e.target.closest('[data-owner]');if(!b)return;activeOwner=b.dataset.owner;renderOrders(true)});
@@ -3261,7 +3314,7 @@ $('processServi').addEventListener('click',async()=>{
   }finally{btn.disabled=false;setTimeout(()=>{btn.textContent='Actualizar status'},250)}
 });
 $('processTc').addEventListener('click',async()=>{
-  const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');if(!validateBaseBeforeProcess(rows,'tc','resTc'))return;saveSafetyBackup(db,'antes_de_carga');const btn=$('processTc'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Sincronizando...';try{const r=processTcRows(rows);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase; conserva TC y reintenta</b>'}`);if(ok)$('txtTc').value=''}finally{btn.disabled=false;btn.textContent=oldText}});
+  const rows=parseTSV($('txtTc').value);if(!rows.length)return toast('No hay datos para procesar');if(!validateBaseBeforeProcess(rows,'tc','resTc'))return;saveSafetyBackup(db,'antes_de_carga');const btn=$('processTc'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Cruzando TC...';try{const prep=await prepareTcOrdersFromFirebase(rows);btn.textContent='Sincronizando...';const r=processTcRows(prep.rows);r.nonServi=(r.nonServi||0)+(prep.omitted||0);renderAll();const ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides});showResult('resTc',`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b>${r.nonServi?` · Otros couriers omitidos: <b>${r.nonServi}</b>`:''}${prep.loaded?` · Guías recuperadas de Firebase: <b>${prep.loaded}</b>`:''} · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase; conserva TC y reintenta</b>'}`);if(ok)$('txtTc').value=''}finally{btn.disabled=false;btn.textContent=oldText}});
 async function processFile(inputId,type,resultId){
   try{
     const rows=await rowsFromFile($(inputId));let r,ok=false,hydrated=[];
@@ -3285,13 +3338,13 @@ async function processFile(inputId,type,resultId){
       if(ok&&orderTargets.length)ok=await verifyServiCloud(orderTargets);
       if(ok)clearServiPending(orderTargets,sourceTargets);
     }
-    if(type==='tc'){r=processTcRows(rows);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}
-    showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fechas corregidas: <b>${r.dateCorrected||0}</b> · Fecha detectada: <b>${r.dateMode==='DMY'?'DD/MM':r.dateMode==='MDY'?'MM/DD':'AUTO'}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos completos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b> · Fechas inválidas rechazadas: <b>${r.invalidDate||0}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b> · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`)
+    if(type==='tc'){const prep=await prepareTcOrdersFromFirebase(rows);r=processTcRows(prep.rows);r.cloudRecovered=prep.loaded;r.nonServi=(r.nonServi||0)+(prep.omitted||0);renderAll();ok=await syncExplicitBulkNow('tc',{orderGuides:r.changedGuides,tcGuides:r.sourceGuides,contactSocios:r.contactSocios,guidePhoneGuides:r.guidePhoneGuides})}
+    showResult(resultId,type==='normal'?`Nuevos: <b>${r.created}</b> · Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Otros couriers omitidos: <b>${r.nonServi}</b> · Sin responsable: <b>${r.unassigned}</b> · Sin canal: <b>${r.missingChannel}</b>${hydrated.length?` · Cruces auxiliares: <b>${hydrated.length}</b>`:''} · Fechas corregidas: <b>${r.dateCorrected||0}</b> · Fecha detectada: <b>${r.dateMode==='DMY'?'DD/MM':r.dateMode==='MDY'?'MM/DD':'AUTO'}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:type==='servi'?`Modificados: <b>${r.updated}</b> · Omitidos iguales: <b>${r.unchanged}</b> · Entregados nuevos: <b>${r.deliveredNow}</b> · Protegidos completos: <b>${r.locked}</b> · Guardados para cruce futuro: <b>${r.notFound}</b> · Fechas inválidas rechazadas: <b>${r.invalidDate||0}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`:`Actualización global · Guías modificadas: <b>${r.guideMatches}</b> · TC nuevas/cambiadas: <b>${r.stored}</b> · Omitidas iguales: <b>${r.unchanged}</b>${r.nonServi?` · Otros couriers omitidos: <b>${r.nonServi}</b>`:''}${r.cloudRecovered?` · Guías recuperadas de Firebase: <b>${r.cloudRecovered}</b>`:''} · Contactos nuevos: <b>${r.masterAdded}</b> · Actualizados: <b>${r.masterUpdated}</b> · Celulares recuperados: <b>${r.recovered}</b>${ok?' · <b>Firebase sincronizado</b>':' · <b style="color:#b42318">No llegó a Firebase</b>'}`)
   }catch(e){alert(e.message||e)}
 }
 $('loadNormalFile').addEventListener('click',()=>processFile('fileNormal','normal','resNormal'));$('loadServiFile').addEventListener('click',()=>processFile('fileServi','servi','resServi'));$('loadTcFile').addEventListener('click',()=>processFile('fileTc','tc','resTc'));
 // INFOBIP
-$('iMonth').addEventListener('change',async()=>{const ok=await ensureInfobipMonthReady($('iMonth').value);if(ok)renderInfo();else renderInfo()});
+$('iMonth').addEventListener('change',async()=>{await ensureInfobipMonthReady($('iMonth').value);renderInfo()});
 ['iDate','iOwner','iChannel'].forEach(id=>$(id).addEventListener('change',renderInfo));
 function selectedInfoRows(section){const ids=[...document.querySelectorAll(`.info-check[data-section="${section}"]:checked`)].map(x=>x.dataset.guia),type=section==='agency'?'Retiro agencia':'General 48–72h';return infoRows().filter(o=>o._msg.type===type&&ids.includes(o.guia))}
 function readyInfoChecks(section){return[...document.querySelectorAll(`.info-check[data-section="${section}"]:not(:disabled)`)]}
@@ -3536,19 +3589,52 @@ $('closeSocio').addEventListener('click',()=>$('socioModal').style.display='none
 
 updateBulkClaimUI();
 window.addEventListener('pagehide',()=>{try{cachePut('db',db)}catch(e){}});
-// v91: cambio de mes seguro + snapshots históricos legítimos.
-// v88: estabilidad primero. Nunca recargar automáticamente por una versión detectada
-// en GitHub: durante el despliegue GitHub Pages puede servir temporalmente una versión
-// anterior y provocar un rebote (v88 -> v85). La versión se actualiza únicamente al
-// recargar/abrir la página por decisión del usuario.
+// v95: control de versión sin auto-reload. Una versión vieja se desconecta de
+// Firestore cuando GitHub confirma una versión superior, evitando que una pestaña
+// antigua siga multiplicando lecturas durante cargas masivas.
+let staleBuildLocked=false,lastPublishedBuildCheck=0;
+function buildMajor(v){const m=String(v||'').match(/^v(\d+)/i);return m?Number(m[1]):0}
+function stopAllCloudListeners(){
+  stopOrdersListener();
+  if(syncSignalUnsub)try{syncSignalUnsub()}catch(e){};syncSignalUnsub=null;
+  if(configUnsub)try{configUnsub()}catch(e){};configUnsub=null;
+}
+function showStaleBuildLock(remote){
+  let el=document.getElementById('staleBuildLock');
+  if(!el){
+    el=document.createElement('div');el.id='staleBuildLock';
+    el.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(22,35,30,.76);display:flex;align-items:center;justify-content:center;padding:20px';
+    el.innerHTML=`<div style="max-width:520px;background:#fff;border-radius:18px;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.28);font-family:Inter,Arial,sans-serif"><h2 style="margin:0 0 10px;color:#1D2A24">Versión nueva disponible</h2><p style="margin:0 0 18px;color:#52635d;line-height:1.45">Esta pestaña fue desconectada de Firebase para evitar lecturas duplicadas. Actualiza para continuar.</p><button id="reloadNewBuild" style="border:0;border-radius:10px;padding:11px 18px;background:#00A651;color:#fff;font-weight:800;cursor:pointer">Actualizar ahora</button><div style="margin-top:10px;font-size:12px;color:#7a8782">Actual: ${APP_BUILD} · Nueva: ${escapeHtml(remote||'')}</div></div>`;
+    document.body.appendChild(el);
+    el.querySelector('#reloadNewBuild').onclick=()=>location.reload();
+  }
+}
+async function lockStaleBuild(remote){
+  if(staleBuildLocked)return;staleBuildLocked=true;firebaseServerLive=false;stopAllCloudListeners();
+  try{await fsDB?.disableNetwork?.()}catch(e){}
+  setCloudStatus('Firebase: versión antigua desconectada','error');showStaleBuildLock(remote);
+}
+async function fetchPublishedBuild(){
+  if(!/^https?:$/.test(location.protocol))return'';
+  const u=new URL(location.href);u.searchParams.set('_servi_build_check',String(Date.now()));
+  const txt=await fetch(u.href,{cache:'no-store',credentials:'same-origin'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text()});
+  const m=txt.match(/const\s+APP_BUILD\s*=\s*['\"](v\d+\.[^'\"]+)['\"]/);return m?m[1]:'';
+}
 async function checkPublishedBuild(){
-  const bs=$('buildStatus');if(bs)bs.textContent='v93';
+  const bs=$('buildStatus');if(bs)bs.textContent='v95';
+  if(staleBuildLocked||Date.now()-lastPublishedBuildCheck<60000)return;
+  lastPublishedBuildCheck=Date.now();
+  try{
+    const remote=await fetchPublishedBuild();
+    if(remote&&buildMajor(remote)>buildMajor(APP_BUILD))await lockStaleBuild(remote);
+  }catch(e){console.warn('Build check',e)}
 }
 
-// v88: sin auto-reload ni polling de versión.
 checkPublishedBuild();
+setInterval(checkPublishedBuild,300000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkPublishedBuild()});
 renderAll();
-window.addEventListener('online',()=>{setCloudStatus('Firebase: reconectando...','saving');try{fsDB?.enableNetwork?.()}catch(e){};if(!fsDB)initFirebase()});
+window.addEventListener('online',()=>{if(staleBuildLocked)return;setCloudStatus('Firebase: reconectando...','saving');try{fsDB?.enableNetwork?.()}catch(e){};if(!fsDB)initFirebase()});
 window.addEventListener('offline',()=>{firebaseServerLive=false;setCloudStatus('Firebase: sin internet','error')});
 initFirebase();
 </script>
